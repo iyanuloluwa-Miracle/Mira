@@ -16,6 +16,10 @@ export function forbiddenError(message = 'Not allowed'): never {
   throw createError({ statusCode: 403, statusMessage: message })
 }
 
+export function notFoundError(message = 'Not found'): never {
+  throw createError({ statusCode: 404, statusMessage: message })
+}
+
 export function conflictError(message: string): never {
   throw createError({ statusCode: 409, statusMessage: message })
 }
