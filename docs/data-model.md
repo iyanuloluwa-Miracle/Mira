@@ -10,6 +10,7 @@ correct and this file is stale — please fix it.
 erDiagram
     USER ||--o{ CONSENT_RECORD : records
     USER ||--o{ SCREENING_SESSION : starts
+    USER ||--o{ SESSION : "signs in with"
     SCREENING_SESSION ||--o{ ITEM_RESPONSE : contains
     SCREENING_SESSION ||--o{ FREE_TEXT_ENTRY : contains
     SCREENING_SESSION ||--o{ MODEL_PREDICTION : contains
@@ -23,12 +24,23 @@ erDiagram
         uuid id PK
         string pseudonym UK
         enum authMode "REGISTERED or ANONYMOUS, default ANONYMOUS"
-        string emailHash UK "nullable, keyed hash — never plaintext"
-        string passwordHash "nullable"
+        string emailHash UK "nullable, keyed hash — used for lookup, never plaintext"
+        bytes emailCiphertext "nullable, AES-256-GCM — decryptable copy for sending mail"
+        bytes emailIv "nullable"
+        bytes emailAuthTag "nullable"
+        string passwordHash "nullable, argon2id"
         string ageBand "nullable"
         datetime createdAt
         datetime lastSeenAt
         datetime deletedAt "nullable, soft delete"
+    }
+    SESSION {
+        uuid id PK
+        uuid userId FK
+        string tokenHash UK "keyed hash of the cookie token — raw token never stored"
+        datetime createdAt
+        datetime lastSeenAt
+        datetime expiresAt "sliding — extended on activity"
     }
     CONSENT_RECORD {
         uuid id PK
@@ -138,11 +150,25 @@ directly. See [Audit trail](#audit-trail) below.
 A person using the app. `authMode` defaults to `ANONYMOUS` because anonymous use is a
 first-class path, not a fallback — nothing in the screening flow requires `emailHash` or
 `passwordHash` to be set. `pseudonym` is the only identifier ever shown back to the person or
-surfaced to a clinician; a real email is never stored — only `emailHash`, a keyed hash (see
-`server/utils/crypto.ts` once it lands), so the database itself cannot be used to recover a
-person's email address. `deletedAt` exists for soft-delete bookkeeping in normal operation, but
-the actual data-subject deletion flow (prompt 16) performs a real, cascading hard delete —
-`deletedAt` is not a substitute for that.
+surfaced to a clinician; a real email is never stored in queryable form — `emailHash` (a keyed
+HMAC-SHA256 hash, see `server/utils/privacy.ts`) is what login/registration actually look up
+by, and `emailCiphertext`/`emailIv`/`emailAuthTag` hold an AES-256-GCM encrypted copy that can
+be decrypted server-side only when the app genuinely needs to send that person mail — the
+database itself still can't be queried by email, and a leaked hash alone can't be reversed to
+recover it. `passwordHash` is argon2id, never a faster/weaker general-purpose hash.
+`deletedAt` exists for soft-delete bookkeeping in normal operation, but the actual
+data-subject deletion flow (prompt 16) performs a real, cascading hard delete — `deletedAt` is
+not a substitute for that.
+
+### Session (FR1)
+
+A server-side record backing one httpOnly session cookie. `tokenHash` — a keyed hash of the
+raw cookie value — is the only thing stored; the raw token itself lives only in the user's
+browser, so a database read (or leak) alone can never be replayed as a valid session. Deleting
+a `User` cascades to their `Session` rows, so account deletion also invalidates every active
+login. `expiresAt` implements sliding expiry: `server/middleware/auth.ts` extends it (and
+re-issues the cookie) on activity, so an active user is never logged out mid-use, while an
+abandoned session still expires.
 
 ### ConsentRecord (NFR1)
 
