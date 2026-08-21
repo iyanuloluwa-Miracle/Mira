@@ -54,6 +54,9 @@
     "vitest": "^3.0.4",
     "vue-tsc": "^2.2.0"
   },
+  "prisma": {
+    "seed": "tsx prisma/seed.ts"
+  },
   "lint-staged": {
     "*.{js,ts,mjs,vue}": [
       "eslint --fix"
