@@ -1,0 +1,16 @@
+// Prisma schema — the single source of truth for persisted shapes.
+// See docs/data-model.md for the narrative version and docs/ndpa-mapping.md for how
+// retention and data-subject rights map onto this schema.
+//
+// No model bodies are defined yet — this is foundation scaffolding, not feature work.
+// When adding models: free text and clinician notes must be encrypted application-side
+// before they reach here (rule R5); emails are stored as keyed hashes, never plaintext.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}

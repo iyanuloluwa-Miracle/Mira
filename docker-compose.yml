@@ -1,0 +1,25 @@
+# Local development stack. Not a production deployment manifest.
+# `docker compose up` — starts Postgres and the classifier service; run `npm run dev` for the
+# Nuxt app itself so you get hot reload.
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: mira
+      POSTGRES_PASSWORD: mira
+      POSTGRES_DB: mira
+    ports:
+      - '5432:5432'
+    volumes:
+      - mira-db-data:/var/lib/postgresql/data
+
+  classifier:
+    build:
+      context: ./services/classifier
+    restart: unless-stopped
+    ports:
+      - '8001:8001'
+
+volumes:
+  mira-db-data:

@@ -9,16 +9,43 @@ dist
 # Node dependencies
 node_modules
 
+# Coverage / test artifacts
+coverage
+playwright-report
+test-results
+.vitest-cache
+
+# Python (services/classifier)
+__pycache__/
+*.pyc
+.venv
+venv
+*.egg-info
+
+# Prisma
+prisma/*.db
+prisma/dev.db*
+
 # Logs
 logs
 *.log
 
-# Misc
+# Editor / OS
 .DS_Store
 .fleet
 .idea
+.vscode/*
+!.vscode/extensions.json
 
-# Local env files
+# Local env files — never commit real secrets
 .env
 .env.*
 !.env.example
+
+# Docs screenshots are optional evidence; keep the folder's README but ignore images by default
+docs/screenshots/*
+!docs/screenshots/README.md
+
+# Participant data must never be committed, accidentally or otherwise (rule R10)
+*.csv
+data/
