@@ -67,20 +67,46 @@ enum ClinicianRole {
 // ANONYMOUS and every other field that could identify a person is nullable until/unless they
 // register.
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  pseudonym    String    @unique
-  authMode     AuthMode  @default(ANONYMOUS)
-  emailHash    String?   @unique
-  passwordHash String?
-  ageBand      String?
-  createdAt    DateTime  @default(now())
-  lastSeenAt   DateTime  @default(now())
-  deletedAt    DateTime?
+  id              String    @id @default(uuid()) @db.Uuid
+  pseudonym       String    @unique
+  authMode        AuthMode  @default(ANONYMOUS)
+  emailHash       String?   @unique
+  // The email itself, encrypted (rule R5) so it can be decrypted server-side for delivery
+  // (e.g. a password-reset or notification email) without ever being queryable in plaintext.
+  // emailHash above is what login/registration actually look up by.
+  emailCiphertext Bytes?
+  emailIv         Bytes?
+  emailAuthTag    Bytes?
+  passwordHash    String?
+  ageBand         String?
+  createdAt       DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
+  deletedAt       DateTime?
 
   consentRecords    ConsentRecord[]
   screeningSessions ScreeningSession[]
+  sessions          Session[]
 
   @@map("users")
+}
+
+// [FR1] A server-side session record backing an httpOnly session cookie. Only tokenHash is
+// stored — the raw token lives in the cookie and is never persisted — so a database read alone
+// can never be used to forge or hijack a session. expiresAt implements sliding expiry: it's
+// pushed forward (and the cookie re-issued) on activity by server/middleware/auth.ts, up to
+// SESSION_TTL_MS from the most recent request.
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  tokenHash  String   @unique
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
 }
 
 // [NFR1] One row per consent decision. granted/withdrawnAt lets a purpose's consent state be

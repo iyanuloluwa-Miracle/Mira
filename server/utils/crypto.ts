@@ -68,3 +68,12 @@ export function decryptField(record: EncryptedField): string {
   const plaintext = Buffer.concat([decipher.update(record.ciphertext), decipher.final()])
   return plaintext.toString('utf8')
 }
+
+// Prisma's generated types for `Bytes` columns expect `Uint8Array<ArrayBuffer>` specifically
+// (per current @types/node), while Node's Buffer is typed `Uint8Array<ArrayBufferLike>` — a
+// real Buffer here is never actually backed by a SharedArrayBuffer, so this narrows a
+// compile-time-only mismatch, not a runtime one. Use when passing EncryptedField bytes into a
+// Prisma create/update call.
+export function toPrismaBytes(buffer: Buffer): Uint8Array<ArrayBuffer> {
+  return buffer as unknown as Uint8Array<ArrayBuffer>
+}
