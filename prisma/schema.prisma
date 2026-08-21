@@ -1,10 +1,12 @@
 // Prisma schema — the single source of truth for persisted shapes.
-// See docs/data-model.md for the narrative version and docs/ndpa-mapping.md for how
-// retention and data-subject rights map onto this schema.
+// See docs/data-model.md for the narrative version (including the Mermaid ERD) and
+// docs/ndpa-mapping.md for how retention and data-subject rights map onto this schema.
 //
-// No model bodies are defined yet — this is foundation scaffolding, not feature work.
-// When adding models: free text and clinician notes must be encrypted application-side
-// before they reach here (rule R5); emails are stored as keyed hashes, never plaintext.
+// Encryption boundary: free text and clinician notes are encrypted application-side with
+// AES-256-GCM before they ever reach a query (rule R5) — the ciphertext/iv/authTag columns
+// below only ever hold opaque bytes. Emails are stored as keyed hashes, never plaintext.
+// Item-level answer validity (0-3) is enforced in server/domain/scoring.ts, not by a DB
+// constraint — see that file once it lands.
 
 generator client {
   provider = "prisma-client-js"
@@ -13,4 +15,273 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+// --- Enums -------------------------------------------------------------------------------
+
+enum AuthMode {
+  REGISTERED
+  ANONYMOUS
+}
+
+enum ConsentPurpose {
+  SCREENING
+  RESEARCH_LOGGING
+}
+
+enum Instrument {
+  PHQ9
+  GAD7
+  COMBINED
+}
+
+enum SessionStatus {
+  IN_PROGRESS
+  COMPLETED
+  ABANDONED
+}
+
+enum RiskLevel {
+  MINIMAL
+  MILD
+  MODERATE
+  HIGH
+  CRISIS
+}
+
+enum EscalationStatus {
+  PENDING
+  ACKNOWLEDGED
+  CONTACTED
+  CLOSED
+}
+
+enum ClinicianRole {
+  CLINICIAN
+  ADMIN
+}
+
+// --- Core models ---------------------------------------------------------------------------
+
+// [FR1] A person using the app. Anonymous use is first-class (rule R9): authMode defaults to
+// ANONYMOUS and every other field that could identify a person is nullable until/unless they
+// register.
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  pseudonym    String    @unique
+  authMode     AuthMode  @default(ANONYMOUS)
+  emailHash    String?   @unique
+  passwordHash String?
+  ageBand      String?
+  createdAt    DateTime  @default(now())
+  lastSeenAt   DateTime  @default(now())
+  deletedAt    DateTime?
+
+  consentRecords    ConsentRecord[]
+  screeningSessions ScreeningSession[]
+
+  @@map("users")
+}
+
+// [NFR1] One row per consent decision. granted/withdrawnAt lets a purpose's consent state be
+// reconstructed at any point in time rather than overwritten in place.
+model ConsentRecord {
+  id             String         @id @default(uuid()) @db.Uuid
+  userId         String         @db.Uuid
+  consentVersion String
+  purpose        ConsentPurpose
+  granted        Boolean
+  grantedAt      DateTime
+  withdrawnAt    DateTime?
+  ipHash         String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("consent_records")
+}
+
+// [FR2] One PHQ-9/GAD-7 administration. Owns the item responses, any optional free-text
+// entry, classifier predictions, and — on completion — exactly one TriageResult.
+model ScreeningSession {
+  id              String        @id @default(uuid()) @db.Uuid
+  userId          String        @db.Uuid
+  instrument      Instrument
+  status          SessionStatus @default(IN_PROGRESS)
+  startedAt       DateTime      @default(now())
+  completedAt     DateTime?
+  clientLatencyMs Int?
+  serverLatencyMs Int?
+
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemResponses    ItemResponse[]
+  freeTextEntries  FreeTextEntry[]
+  modelPredictions ModelPrediction[]
+  triageResult     TriageResult?
+
+  @@index([userId])
+  @@map("screening_sessions")
+}
+
+// [FR2] One answered item. Unique on (sessionId, itemCode) so an answer submission is
+// idempotent — a retried request on a poor connection upserts rather than duplicating.
+model ItemResponse {
+  id         String   @id @default(uuid()) @db.Uuid
+  sessionId  String   @db.Uuid
+  itemCode   String
+  rawValue   Int
+  answeredAt DateTime @default(now())
+
+  session ScreeningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@unique([sessionId, itemCode])
+  @@index([sessionId])
+  @@map("item_responses")
+}
+
+// [FR3][R5] Optional free-text answer, encrypted application-side before it reaches this
+// table. Never holds plaintext — see server/utils/crypto.ts once it lands.
+model FreeTextEntry {
+  id         String   @id @default(uuid()) @db.Uuid
+  sessionId  String   @db.Uuid
+  ciphertext Bytes
+  iv         Bytes
+  authTag    Bytes
+  charCount  Int
+  createdAt  DateTime @default(now())
+
+  session ScreeningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("free_text_entries")
+}
+
+// [FR3][R1] One classifier call's output. Supplementary signal only — see
+// server/domain/triage.ts once it lands for how (and how little) this can move a risk band.
+model ModelPrediction {
+  id             String   @id @default(uuid()) @db.Uuid
+  sessionId      String   @db.Uuid
+  modelName      String
+  modelVersion   String
+  probability    Float
+  predictedLabel String
+  latencyMs      Int
+  topTokensJson  Json
+  createdAt      DateTime @default(now())
+
+  session ScreeningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("model_predictions")
+}
+
+// [FR4][R1][NFR5] The one deterministic triage outcome for a session. rationaleJson holds
+// the plain-language reasons (see server/domain/triage.ts); riskLevel is never set or
+// overridden by a model — only ever raised by at most one step, which the rationale records.
+model TriageResult {
+  id            String    @id @default(uuid()) @db.Uuid
+  sessionId     String    @unique @db.Uuid
+  phq9Total     Int
+  gad7Total     Int
+  phq9Band      String
+  gad7Band      String
+  riskLevel     RiskLevel
+  rationaleJson Json
+  escalated     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  session         ScreeningSession         @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  recommendations ResourceRecommendation[]
+  escalation      Escalation?
+
+  @@index([riskLevel])
+  @@map("triage_results")
+}
+
+// [FR5] A psychoeducational resource. isActive is the deactivation mechanism — resources are
+// never hard-deleted once recommended, so historical ResourceRecommendation rows stay valid.
+model Resource {
+  id        String    @id @default(uuid()) @db.Uuid
+  title     String
+  slug      String    @unique
+  body      String
+  language  String    @default("en")
+  tags      String[]
+  minRisk   RiskLevel
+  maxRisk   RiskLevel
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  recommendations ResourceRecommendation[]
+
+  @@map("resources")
+}
+
+// [FR5] Ranked link between a triage result and a recommended resource.
+model ResourceRecommendation {
+  id             String @id @default(uuid()) @db.Uuid
+  triageResultId String @db.Uuid
+  resourceId     String @db.Uuid
+  rank           Int
+
+  triageResult TriageResult @relation(fields: [triageResultId], references: [id], onDelete: Cascade)
+  resource     Resource     @relation(fields: [resourceId], references: [id], onDelete: Restrict)
+
+  @@unique([triageResultId, resourceId])
+  @@index([triageResultId])
+  @@index([resourceId])
+  @@map("resource_recommendations")
+}
+
+// [FR6][FR7] Human-support follow-up for one triage result. clinicianId is nullable and set
+// to null (not cascaded away) if a clinician account is later removed, so the case history
+// survives staff turnover.
+model Escalation {
+  id              String           @id @default(uuid()) @db.Uuid
+  triageResultId  String           @unique @db.Uuid
+  status          EscalationStatus @default(PENDING)
+  clinicianId     String?          @db.Uuid
+  acknowledgedAt  DateTime?
+  notesCiphertext Bytes?
+  createdAt       DateTime         @default(now())
+
+  triageResult TriageResult @relation(fields: [triageResultId], references: [id], onDelete: Cascade)
+  clinician    Clinician?   @relation(fields: [clinicianId], references: [id], onDelete: SetNull)
+
+  @@index([status])
+  @@index([clinicianId])
+  @@map("escalations")
+}
+
+// [FR7] A clinician/admin account. Deliberately separate from User — see CONTRIBUTING.md on
+// keeping the clinician auth realm distinct from the person-being-screened auth realm.
+model Clinician {
+  id           String        @id @default(uuid()) @db.Uuid
+  email        String        @unique
+  passwordHash String
+  fullName     String
+  role         ClinicianRole @default(CLINICIAN)
+  isActive     Boolean       @default(true)
+
+  escalations Escalation[]
+
+  @@map("clinicians")
+}
+
+// [R4][NFR1] Append-only audit trail. metadataJson must never carry PHI or free text — the
+// same discipline as the request logger (server/utils/logger.ts), enforced by convention and
+// by code review here since there is no relation to redact through.
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  actorType    String
+  actorId      String
+  action       String
+  entityType   String
+  entityId     String
+  metadataJson Json?
+  createdAt    DateTime @default(now())
+
+  @@index([entityType, entityId])
+  @@index([actorType, actorId])
+  @@map("audit_logs")
 }
