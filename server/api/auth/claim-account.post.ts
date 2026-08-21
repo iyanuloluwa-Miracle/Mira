@@ -29,6 +29,10 @@ export default defineEventHandler(async (event) => {
   const { email, password } = parsed.data
 
   const emailHash = hashIdentifier(email)
+
+  const existing = await prisma.user.findUnique({ where: { emailHash } })
+  if (existing) conflictError('An account with this email already exists.')
+
   const passwordHash = await hashPassword(password)
   const encryptedEmail = encryptField(email)
 
@@ -47,6 +51,8 @@ export default defineEventHandler(async (event) => {
 
     return { pseudonym: user.pseudonym, authMode: user.authMode }
   } catch (error) {
+    // Defensive fallback for the check-then-update race the findUnique above can't close on
+    // its own (rare, but real, under concurrent claims with the same email).
     if (isUniqueConstraintViolationOn(error, 'emailHash')) {
       conflictError('An account with this email already exists.')
     }
