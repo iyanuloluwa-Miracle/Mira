@@ -1,0 +1,5 @@
+# Minimal foundation only — pin exact versions and add a trained model's dependencies
+# (e.g. torch, transformers) when the classifier is actually implemented.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.32,<1.0
+pydantic>=2.9,<3.0

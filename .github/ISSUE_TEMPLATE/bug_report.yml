@@ -1,0 +1,48 @@
+name: Bug report
+description: Report a defect in Mira
+labels: ['bug']
+body:
+  - type: markdown
+    attributes:
+      value: |
+        If this report concerns triage, scoring, or the crisis pathway, please say so clearly
+        in the description — those get triaged with higher urgency. Do not include any real
+        participant data, screenshots of real responses, or personal information in this
+        report (see CLAUDE.md rule R10).
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Use synthetic inputs only, e.g. "PHQ-9 answers all 0 except item 9 = 1".
+    validations:
+      required: true
+  - type: input
+    id: area
+    attributes:
+      label: Affected area
+      description: e.g. server/domain/triage.ts, app/pages/screen, classifier service
+    validations:
+      required: false
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Does this affect a safety-critical path (triage, crisis routing, encryption, logging redaction)?
+      options:
+        - 'No'
+        - 'Yes'
+        - 'Not sure'
+    validations:
+      required: true

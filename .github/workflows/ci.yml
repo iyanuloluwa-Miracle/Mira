@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  scan-forbidden-content:
+    name: Scan for secrets and participant data
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Fail on likely secret patterns
+        run: |
+          set -e
+          PATTERN='(-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|sk-[A-Za-z0-9]{20,}|xox[baprs]-[A-Za-z0-9-]{10,})'
+          if git grep -nIE "$PATTERN" -- . ':(exclude).github/workflows/ci.yml'; then
+            echo "::error::Possible secret detected in the diff — see matches above."
+            exit 1
+          fi
+          echo "No secret patterns found."
+
+      - name: Fail on staged participant-data patterns
+        run: |
+          set -e
+          if git ls-files | grep -E '(^|/)data/' ; then
+            echo "::error::A data/ directory is tracked in git. Participant data must never be committed (see CLAUDE.md rule R10)."
+            exit 1
+          fi
+          if git ls-files '*.csv' | grep -v -E '^tests/fixtures/' ; then
+            echo "::error::A .csv file outside tests/fixtures/ is tracked in git. Participant exports must never be committed (see CLAUDE.md rule R10)."
+            exit 1
+          fi
+          echo "No forbidden participant-data patterns found."
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run typecheck
+
+  unit:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm test
+
+  coverage:
+    name: Coverage thresholds (server/domain, server/utils)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:coverage
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run test:integration
+
+  e2e:
+    name: End-to-end tests (Playwright, mobile viewport)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
