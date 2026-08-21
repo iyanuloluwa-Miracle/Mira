@@ -1,0 +1,21 @@
+{
+  // Covers plain Node TypeScript that isn't part of the Nuxt app/server build — scripts/,
+  // tests/, and prisma/seed.ts — none of which appear in any of the generated .nuxt/tsconfig.*
+  // project references `npm run typecheck` otherwise follows (they only cover app/ and
+  // server/). Same strictness as the Nuxt-managed configs (see nuxt.config.ts's `typescript`
+  // block) so there's one consistent bar across the whole codebase.
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "types": ["node"]
+  },
+  "include": ["scripts/**/*.ts", "tests/**/*.ts", "prisma/**/*.ts"]
+}
