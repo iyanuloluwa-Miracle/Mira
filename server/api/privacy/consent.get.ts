@@ -7,8 +7,7 @@ import { z } from 'zod'
 const querySchema = z.object({ purpose: z.enum(['SCREENING', 'RESEARCH_LOGGING']) }).strict()
 
 export default defineEventHandler(async (event) => {
-  const user = event.context.user
-  if (!user) unauthorizedError('An active session is required to read consent state.')
+  const user = requireUser(event)
 
   const parsed = querySchema.safeParse(getQuery(event))
   if (!parsed.success) badRequestError('A valid purpose query parameter is required.')

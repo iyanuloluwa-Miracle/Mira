@@ -15,8 +15,7 @@ const bodySchema = z
   .strict()
 
 export default defineEventHandler(async (event) => {
-  const user = event.context.user
-  if (!user) unauthorizedError('An active session is required to record consent.')
+  const user = requireUser(event)
 
   const parsed = bodySchema.safeParse(await readBody(event))
   if (!parsed.success) badRequestError('purpose, granted, and consentVersion are required.')
