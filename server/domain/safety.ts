@@ -5,20 +5,19 @@
 // a caller can show this the instant CRISIS is known, with no loading state and no wait on a
 // model or service call.
 //
-// DRAFT COPY: the strings below have not yet had clinical sign-off. Per CONTRIBUTING.md, any
-// change to this file requires clinical review before merge, same as app/content/copy/ — which
-// is where this text belongs once the UI layer that renders it exists.
+// The message/instruction text lives in shared/copy/crisis.ts, not here, so
+// app/pages/support/crisis.vue can use the exact same strings without importing anything from
+// server/domain/ (which would cross the client/server boundary) or fetching them over the
+// network (which rule R3 forbids for this path). Re-exported below so existing imports of
+// CRISIS_MESSAGE/CRISIS_INSTRUCTION from this file keep working unchanged.
+//
+// DRAFT COPY: not yet clinically reviewed. Per CONTRIBUTING.md, any change requires clinical
+// review before merge, same as app/content/copy/.
 
 import { ALL_HELPLINES_VERIFIED, HELPLINES, type HelplineContact } from '../../config/helplines'
+import { CRISIS_INSTRUCTION, CRISIS_MESSAGE } from '../../shared/copy/crisis'
 
-export const CRISIS_MESSAGE =
-  "What you've shared suggests you may be having thoughts of hurting yourself. You are not " +
-  'alone, and reaching out for support now is a sign of strength, not a failure.'
-
-export const CRISIS_INSTRUCTION =
-  'Please contact a trusted person in your life or a local emergency service right now. If ' +
-  'you are in immediate danger, call your local emergency number or go to the nearest ' +
-  'emergency room.'
+export { CRISIS_INSTRUCTION, CRISIS_MESSAGE }
 
 export interface CrisisResponse {
   message: string
