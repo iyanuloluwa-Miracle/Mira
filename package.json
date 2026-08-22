@@ -29,7 +29,6 @@
     "traceability": "tsx scripts/generate-traceability.ts"
   },
   "dependencies": {
-    "@nuxt/fonts": "^0.14.0",
     "@prisma/client": "^6.3.1",
     "@tailwindcss/vite": "^4.3.3",
     "argon2": "^0.45.1",
