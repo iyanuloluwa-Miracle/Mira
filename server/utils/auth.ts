@@ -6,7 +6,7 @@
 import { createHmac, randomBytes } from 'node:crypto'
 import type { H3Event } from 'h3'
 import argon2 from 'argon2'
-import { Prisma } from '@prisma/client'
+import { Prisma, type User } from '@prisma/client'
 
 export const SESSION_COOKIE_NAME = 'mira_session'
 
@@ -71,6 +71,14 @@ export function setSessionCookie(event: H3Event, token: string, expiresAt: Date)
 
 export function clearSessionCookie(event: H3Event): void {
   deleteCookie(event, SESSION_COOKIE_NAME, { path: '/' })
+}
+
+// [R9] Anonymous or registered, either is fine — this only requires *some* session to exist.
+// Throws a generic 401 otherwise, matching the pattern every session-requiring route needs.
+export function requireUser(event: H3Event): User {
+  const user = event.context.user
+  if (!user) unauthorizedError('An active session is required.')
+  return user
 }
 
 // [FR1] Creates a server-side Session row for userId and sets the cookie for it. Shared by
