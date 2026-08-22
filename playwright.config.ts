@@ -10,6 +10,14 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
   reporter: [['html', { open: 'never' }]],
+  // The dev/CI database is remote (Neon serverless Postgres) rather than a local instance.
+  // Its compute auto-suspends when idle and can take 2-3s to resume on the first query after a
+  // gap, on top of genuine cross-region round-trip latency for every query after that — real
+  // network behavior, not something to mock away. The default 5s assertion timeout is tuned for
+  // in-memory/local backends and flakes against that, especially on /complete which makes
+  // several sequential round trips. This does not change the app's own NFR3 latency budget
+  // (serverLatencyMs, measured in server/api/screening/[id]/complete.post.ts).
+  expect: { timeout: 15_000 },
   use: {
     baseURL: process.env.APP_BASE_URL ?? 'http://localhost:3000',
     trace: 'on-first-retry'
