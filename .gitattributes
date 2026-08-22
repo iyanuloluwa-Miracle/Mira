@@ -1,0 +1,11 @@
+# Normalize line endings to LF in the repository regardless of a contributor's local
+# core.autocrlf setting, so Prettier's LF default and git checkout never fight each other.
+* text=auto eol=lf
+
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.woff binary
+*.woff2 binary

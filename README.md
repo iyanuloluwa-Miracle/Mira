@@ -51,14 +51,24 @@ classifier or the LLM, can ever decide, lower, or override a risk band. See
 
 ## Quick start
 
-Requirements: Node (see [.nvmrc](.nvmrc)), npm, and Docker if you want the classifier service
-and Postgres running locally.
+Requirements: Node (see [.nvmrc](.nvmrc)) and npm. Postgres is needed too — either via Docker,
+or without it (see below).
 
 ```bash
 npm install
 cp .env.example .env        # fill in local values; never commit .env
 npm run dev                 # Nuxt app at http://localhost:3000
 ```
+
+### Postgres, with or without Docker
+
+With Docker: `docker compose up -d db`, then `npx prisma migrate deploy && npm run db:seed`.
+
+Without Docker: `npm run db:local` starts an in-process, Postgres-compatible database (via
+[PGlite](https://pglite.dev)) in your terminal — leave it running and, in another terminal, run
+`npx prisma migrate deploy && npm run db:seed` against the URL it prints. See the comment at the
+top of [`scripts/dev-db.ts`](scripts/dev-db.ts) for the two ways it behaves differently from
+real Postgres (`prisma migrate dev` and prepared statements).
 
 ## Running tests
 

@@ -1,9 +1,44 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
+/* [NFR2] System font stack — 0 bytes, 0 requests, and every platform's own font renders
+   crisper on its own hinting/rasterizer than a downloaded web font would anyway. */
 @theme {
-  --font-sans: 'Lexend', sans-serif;
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
 body {
   font-family: var(--font-sans);
+}
+
+/* [Accessibility] A visible focus ring everywhere, not just where the browser default happens
+   to show one — required for anyone navigating by keyboard or switch device. */
+:focus-visible {
+  outline: 3px solid var(--color-indigo-600, #4f46e5);
+  outline-offset: 2px;
+}
+
+/* Respect a user's motion preference instead of assuming everyone wants transitions. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Screen-reader-only utility: visually hidden but still announced, for content like the
+   progress live region that shouldn't duplicate what's already shown on screen. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

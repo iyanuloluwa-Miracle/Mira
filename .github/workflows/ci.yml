@@ -51,6 +51,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npx prisma generate
       - run: npm run lint
 
   typecheck:
@@ -63,6 +64,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npx prisma generate
       - run: npm run typecheck
 
   unit:
@@ -75,6 +77,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npx prisma generate
       - run: npm test
 
   coverage:
@@ -87,6 +90,7 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npx prisma generate
       - run: npm run test:coverage
 
   integration:
@@ -99,6 +103,10 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npx prisma generate
+      # tests/integration/helpers/test-server.ts spawns .output/server/index.mjs directly, so
+      # the integration suite needs a real production build to exist before it runs.
+      - run: npm run build
       - run: npm run test:integration
 
   e2e:
@@ -111,5 +119,6 @@ jobs:
           node-version-file: '.nvmrc'
           cache: 'npm'
       - run: npm ci
+      - run: npx prisma generate
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
