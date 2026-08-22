@@ -9,6 +9,12 @@ export default defineConfig({
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
+  // The app server under test holds a single Prisma connection pool against Neon's direct
+  // (non-pooled) endpoint, which caps concurrent connections much lower than a pgbouncer-backed
+  // one. Several Playwright workers hammering it at once was enough to exhaust that pool
+  // (PrismaClientInitializationError / P1001) — one worker keeps this suite's request volume
+  // within what the shared database can actually sustain.
+  workers: 1,
   reporter: [['html', { open: 'never' }]],
   // The dev/CI database is remote (Neon serverless Postgres) rather than a local instance.
   // Its compute auto-suspends when idle and can take 2-3s to resume on the first query after a
