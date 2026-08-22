@@ -6,6 +6,12 @@ export default defineNuxtConfig({
   devtools: { enabled: true },
   modules: ['@nuxt/eslint'],
   css: ['~/assets/css/main.css'],
+  app: {
+    head: {
+      htmlAttrs: { lang: 'en' },
+      title: 'Mira — a private mental health check-in'
+    }
+  },
   vite: {
     plugins: [tailwindcss()]
   },
