@@ -256,6 +256,101 @@ describe('ownership — cross-user access is forbidden', () => {
   })
 })
 
+describe('DELETE /api/screening/[id]', () => {
+  it('deletes the session and everything it cascades to', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+    await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
+      method: 'POST',
+      headers: { cookie }
+    })
+
+    const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
+      method: 'DELETE',
+      headers: { cookie }
+    })
+    expect(response.status).toBe(200)
+    const body = await response.json()
+    expect(body.deleted).toBe(true)
+
+    const session = await prisma.screeningSession.findUnique({ where: { id: sessionId } })
+    expect(session).toBeNull()
+    const triageResult = await prisma.triageResult.findUnique({ where: { sessionId } })
+    expect(triageResult).toBeNull()
+    const responses = await prisma.itemResponse.findMany({ where: { sessionId } })
+    expect(responses).toHaveLength(0)
+  })
+
+  it('also deletes an escalation row for a deleted CRISIS session', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, { ...allItemsAtZero(), PHQ9_Q9: 1 })
+    const completeResponse = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
+      method: 'POST',
+      headers: { cookie }
+    })
+    const completed = await completeResponse.json()
+    expect(completed.riskLevel).toBe('CRISIS')
+
+    await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
+      method: 'DELETE',
+      headers: { cookie }
+    })
+
+    const escalations = await prisma.escalation.findMany({
+      where: { triageResult: { sessionId } }
+    })
+    expect(escalations).toHaveLength(0)
+  })
+
+  it('returns 403 when another user tries to delete a session that is not theirs', async () => {
+    const ownerCookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(ownerCookie)
+
+    const otherCookie = await startAnonymousSession()
+    const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
+      method: 'DELETE',
+      headers: { cookie: otherCookie }
+    })
+    expect(response.status).toBe(403)
+
+    const session = await prisma.screeningSession.findUnique({ where: { id: sessionId } })
+    expect(session).not.toBeNull()
+  })
+
+  it('returns 404 for a session that does not exist', async () => {
+    const cookie = await startAnonymousSession()
+    const response = await fetch(
+      `${server.baseUrl}/api/screening/00000000-0000-0000-0000-000000000000`,
+      {
+        method: 'DELETE',
+        headers: { cookie }
+      }
+    )
+    expect(response.status).toBe(404)
+  })
+
+  it('writes a SCREENING_SESSION_DELETED audit entry', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
+      method: 'DELETE',
+      headers: { cookie }
+    })
+
+    const entries = await prisma.auditLog.findMany({
+      where: {
+        entityType: 'ScreeningSession',
+        entityId: sessionId,
+        action: 'SCREENING_SESSION_DELETED'
+      }
+    })
+    expect(entries).toHaveLength(1)
+  })
+})
+
 describe('idempotent answer replay', () => {
   it('upserts rather than duplicating when the same item is answered twice', async () => {
     const cookie = await startAnonymousSession()

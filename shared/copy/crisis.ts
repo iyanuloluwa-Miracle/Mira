@@ -1,17 +1,12 @@
-// [R3] The static crisis pathway's message text — the single source both server (triage/safety
-// API responses) and client (the always-available crisis page, app/pages/support/crisis.vue)
-// import directly, so there is no version to fetch and nothing that can be "loading". Plain
-// data in shared/ rather than server/domain/ specifically so client code can import it without
-// crossing the server/domain purity boundary (CLAUDE.md) or pulling any server-only module
-// into the client bundle.
+// [R3] Re-exports the crisis message/instruction from app/content/copy/postScreening.ts — the
+// single reviewable copy file per CONTRIBUTING.md ("every string a distressed user might read
+// ... rule R3"). This module exists only so server/domain/safety.ts (which must not import
+// from app/, a Nuxt-client-only tree, per CLAUDE.md's layering rules) can still reach that text:
+// app/content/copy/postScreening.ts is plain data with no Nuxt/Vue imports of its own, so
+// importing it here is safe, just one directory hop removed from the domain layer that actually
+// uses it.
 //
-// DRAFT COPY: not yet clinically reviewed — see CONTRIBUTING.md before editing.
+// DRAFT COPY: not yet clinically reviewed — see CONTRIBUTING.md before editing. Edit the text
+// itself in app/content/copy/postScreening.ts, not here.
 
-export const CRISIS_MESSAGE =
-  "What you've shared suggests you may be having thoughts of hurting yourself. You are not " +
-  'alone, and reaching out for support now is a sign of strength, not a failure.'
-
-export const CRISIS_INSTRUCTION =
-  'Please contact a trusted person in your life or a local emergency service right now. If ' +
-  'you are in immediate danger, call your local emergency number or go to the nearest ' +
-  'emergency room.'
+export { CRISIS_INSTRUCTION, CRISIS_MESSAGE } from '../../app/content/copy/postScreening'
