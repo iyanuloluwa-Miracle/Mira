@@ -138,6 +138,11 @@ model ScreeningSession {
   completedAt     DateTime?
   clientLatencyMs Int?
   serverLatencyMs Int?
+  // [FR3] Set when the person explicitly declines the optional free-text step (server/api/
+  // screening/[id]/text.post.ts's skip path) — distinct from simply never having called that
+  // endpoint, so the result page can say "you chose not to share a written response" rather
+  // than silently showing nothing.
+  freeTextExcluded Boolean       @default(false)
 
   user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   itemResponses    ItemResponse[]
