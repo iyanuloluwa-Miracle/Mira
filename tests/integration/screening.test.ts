@@ -66,6 +66,33 @@ async function answerAll(
   }
 }
 
+async function submitFreeText(cookie: string, sessionId: string, text: string): Promise<Response> {
+  return fetch(`${server.baseUrl}/api/screening/${sessionId}/text`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ text })
+  })
+}
+
+async function skipFreeText(cookie: string, sessionId: string): Promise<Response> {
+  return fetch(`${server.baseUrl}/api/screening/${sessionId}/text`, {
+    method: 'POST',
+    headers: { cookie, 'content-type': 'application/json' },
+    body: JSON.stringify({ skip: true })
+  })
+}
+
+async function completeSession(cookie: string, sessionId: string): Promise<Response> {
+  return fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
+    method: 'POST',
+    headers: { cookie }
+  })
+}
+
+async function getResult(cookie: string, sessionId: string): Promise<Response> {
+  return fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, { headers: { cookie } })
+}
+
 describe('POST /api/screening/start', () => {
   it('creates a COMBINED session and returns both instrument definitions', async () => {
     const cookie = await startAnonymousSession()
@@ -464,5 +491,392 @@ describe('audit logging', () => {
       }
     })
     expect(entries).toHaveLength(0)
+  })
+})
+
+describe('POST /api/screening/[id]/text — submitting free text (FR3, R4, R5)', () => {
+  it('encrypts the text so it is unreadable at rest', async () => {
+    const marker = 'a very specific marker phrase that must never appear in plaintext anywhere'
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    const response = await submitFreeText(cookie, sessionId, marker)
+    expect(response.status).toBe(200)
+
+    const entry = await prisma.freeTextEntry.findFirstOrThrow({ where: { sessionId } })
+    expect(entry.charCount).toBe(marker.length)
+    expect(Buffer.from(entry.ciphertext).includes(Buffer.from(marker, 'utf8'))).toBe(false)
+    // The whole database dump, not just this one row's ciphertext column, must not contain it.
+    const raw = JSON.stringify(entry, (_key, value) =>
+      value?.type === 'Buffer' ? Buffer.from(value.data).toString('latin1') : value
+    )
+    expect(raw).not.toContain(marker)
+  })
+
+  it('is idempotent — a retried submission after the first succeeded does not duplicate', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    const first = await submitFreeText(cookie, sessionId, 'I feel hopeless today')
+    const second = await submitFreeText(cookie, sessionId, 'I feel hopeless today')
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+
+    const entries = await prisma.freeTextEntry.findMany({ where: { sessionId } })
+    expect(entries).toHaveLength(1)
+    const predictions = await prisma.modelPrediction.findMany({ where: { sessionId } })
+    expect(predictions).toHaveLength(1)
+  })
+
+  it('classifies the text and stores a ModelPrediction with topTokens', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    const response = await submitFreeText(cookie, sessionId, 'I feel hopeless and worthless')
+    expect(response.status).toBe(200)
+
+    const prediction = await prisma.modelPrediction.findFirstOrThrow({ where: { sessionId } })
+    expect(prediction.modelVersion).toBe('mock-0.1')
+    expect(prediction.predictedLabel).toBe('SYMPTOMATIC')
+    expect(Array.isArray(prediction.topTokensJson)).toBe(true)
+    expect((prediction.topTokensJson as unknown[]).length).toBeGreaterThan(0)
+  })
+
+  it('never lets the submitted text appear in any server log line', async () => {
+    const marker = 'zzz-unique-log-marker-should-never-appear-zzz'
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    const response = await submitFreeText(cookie, sessionId, `I feel hopeless. ${marker}`)
+    expect(response.status).toBe(200)
+
+    expect(server.getOutput()).not.toContain(marker)
+  })
+
+  it('rejects text over the character limit', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    const response = await submitFreeText(cookie, sessionId, 'a'.repeat(2001))
+    expect(response.status).toBe(400)
+  })
+
+  it('rejects an empty string', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    const response = await submitFreeText(cookie, sessionId, '')
+    expect(response.status).toBe(400)
+  })
+
+  it('requires the session to still be in progress', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+    await completeSession(cookie, sessionId)
+
+    const response = await submitFreeText(cookie, sessionId, 'too late now')
+    expect(response.status).toBe(400)
+  })
+
+  it("returns 403 for another user's session", async () => {
+    const ownerCookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(ownerCookie)
+
+    const otherCookie = await startAnonymousSession()
+    const response = await submitFreeText(otherCookie, sessionId, 'not mine to write in')
+    expect(response.status).toBe(403)
+  })
+
+  it('writes a FREE_TEXT_SUBMITTED audit entry without the text in its metadata', async () => {
+    const marker = 'audit-marker-text'
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await submitFreeText(cookie, sessionId, marker)
+
+    const entries = await prisma.auditLog.findMany({
+      where: { entityType: 'ScreeningSession', entityId: sessionId, action: 'FREE_TEXT_SUBMITTED' }
+    })
+    expect(entries).toHaveLength(1)
+    expect(JSON.stringify(entries[0]!.metadataJson)).not.toContain(marker)
+  })
+})
+
+describe('POST /api/screening/[id]/text — skipping (the per-session exclude setting)', () => {
+  it('sets freeTextExcluded and is idempotent on retry', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    const first = await skipFreeText(cookie, sessionId)
+    const second = await skipFreeText(cookie, sessionId)
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+
+    const session = await prisma.screeningSession.findUniqueOrThrow({ where: { id: sessionId } })
+    expect(session.freeTextExcluded).toBe(true)
+  })
+
+  it('leaves no FreeTextEntry or ModelPrediction behind', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await skipFreeText(cookie, sessionId)
+
+    expect(await prisma.freeTextEntry.count({ where: { sessionId } })).toBe(0)
+    expect(await prisma.modelPrediction.count({ where: { sessionId } })).toBe(0)
+  })
+
+  it('is a no-op if text is submitted after already skipping', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await skipFreeText(cookie, sessionId)
+
+    const response = await submitFreeText(cookie, sessionId, 'changed my mind')
+    expect(response.status).toBe(200)
+    expect(await prisma.freeTextEntry.count({ where: { sessionId } })).toBe(0)
+  })
+})
+
+describe('free text wired into triage on completion (FR3, R1)', () => {
+  it('raises the risk level by exactly one step when free text is strongly SYMPTOMATIC', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+
+    // PHQ9 10-14 with GAD7 at 0 lands rule-based MILD (server/domain/triage.ts).
+    const values = allItemsAtZero()
+    values.PHQ9_Q1 = 3
+    values.PHQ9_Q2 = 3
+    values.PHQ9_Q3 = 3
+    values.PHQ9_Q4 = 2
+    await answerAll(cookie, sessionId, values)
+
+    // Several lexicon hits push MockClassifier's probability to (near-)1, well past the 0.85
+    // HIGH-suggestion threshold — deliberately overshooting to prove the *cap* at one step.
+    await submitFreeText(
+      cookie,
+      sessionId,
+      'I feel hopeless and worthless, no point in anything, I want to give up completely'
+    )
+
+    const response = await completeSession(cookie, sessionId)
+    const body = await response.json()
+
+    expect(body.riskLevel).toBe('MODERATE') // MILD -> +1 step, not HIGH despite the model's strength
+    expect(body.rationale.join(' ')).toMatch(/text-analysis|model/i)
+  })
+
+  it('does not raise the level when free text is classified NON_SYMPTOMATIC', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+    await submitFreeText(cookie, sessionId, 'the weather has been pleasant lately')
+
+    const response = await completeSession(cookie, sessionId)
+    const body = await response.json()
+
+    expect(body.riskLevel).toBe('MINIMAL')
+    expect(body.rationale.join(' ')).not.toMatch(/text-analysis|model/i)
+  })
+
+  it('never raises past HIGH even when already rule-based HIGH', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    const values = allItemsAtZero()
+    values.PHQ9_Q1 = 3
+    values.PHQ9_Q2 = 3
+    values.PHQ9_Q3 = 3
+    values.PHQ9_Q4 = 3
+    values.PHQ9_Q5 = 3
+    values.PHQ9_Q6 = 3
+    values.PHQ9_Q7 = 2
+    await answerAll(cookie, sessionId, values) // PHQ9 total 20 -> HIGH
+    await submitFreeText(cookie, sessionId, 'hopeless worthless give up completely')
+
+    const response = await completeSession(cookie, sessionId)
+    const body = await response.json()
+    expect(body.riskLevel).toBe('HIGH')
+  })
+
+  it('never overrides an item-9-triggered CRISIS, regardless of free text', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, { ...allItemsAtZero(), PHQ9_Q9: 1 })
+    await submitFreeText(cookie, sessionId, 'actually feeling fine about everything')
+
+    const response = await completeSession(cookie, sessionId)
+    const body = await response.json()
+    expect(body.riskLevel).toBe('CRISIS')
+  })
+})
+
+describe('GET /api/screening/[id]/result — textAnalysis', () => {
+  it('returns available spans that reconstruct the original text when free text was classified', async () => {
+    const text = 'I feel hopeless and worthless today'
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+    await submitFreeText(cookie, sessionId, text)
+    await completeSession(cookie, sessionId)
+
+    const response = await getResult(cookie, sessionId)
+    const body = await response.json()
+
+    expect(body.textAnalysis.available).toBe(true)
+    const spans: Array<{ text: string; highlighted: boolean }> = body.textAnalysis.spans
+    expect(spans.map((s) => s.text).join('')).toBe(text)
+    expect(spans.some((s) => s.highlighted)).toBe(true)
+  })
+
+  it('never includes the raw submitted text as its own field, only as span text', async () => {
+    const text = 'I feel hopeless and worthless today'
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+    await submitFreeText(cookie, sessionId, text)
+    await completeSession(cookie, sessionId)
+
+    const response = await getResult(cookie, sessionId)
+    const body = await response.json()
+    expect(body.textAnalysis).not.toHaveProperty('text')
+  })
+
+  it('reports text-free when free text was explicitly skipped', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+    await skipFreeText(cookie, sessionId)
+    await completeSession(cookie, sessionId)
+
+    const response = await getResult(cookie, sessionId)
+    const body = await response.json()
+    expect(body.textAnalysis).toEqual({ available: false, reason: 'text-free' })
+  })
+
+  it('reports text-free when free text was never submitted at all', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+    await completeSession(cookie, sessionId)
+
+    const response = await getResult(cookie, sessionId)
+    const body = await response.json()
+    expect(body.textAnalysis).toEqual({ available: false, reason: 'text-free' })
+  })
+
+  it('reports text-free for a CRISIS result even if free text was submitted', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, { ...allItemsAtZero(), PHQ9_Q9: 1 })
+    await submitFreeText(cookie, sessionId, 'some text that will never be shown back')
+    await completeSession(cookie, sessionId)
+
+    const response = await getResult(cookie, sessionId)
+    const body = await response.json()
+    expect(body.riskLevel).toBe('CRISIS')
+    expect(body.textAnalysis).toEqual({ available: false, reason: 'text-free' })
+  })
+})
+
+// A separate server, deliberately misconfigured with an unreachable classifier — proves rule
+// R7 against a real spawned process rather than mocking the classifier module out.
+describe('graceful degradation — classifier unavailable at submission time (rule R7)', () => {
+  let degradedServer: TestServer
+  let degradedPrisma: PrismaClient
+
+  beforeAll(async () => {
+    degradedServer = await startTestServer({
+      CLASSIFIER_MODE: 'http',
+      CLASSIFIER_SERVICE_URL: 'http://127.0.0.1:1'
+    })
+    degradedPrisma = new PrismaClient({
+      datasources: { db: { url: degradedServer.databaseUrl } }
+    })
+  }, 60_000)
+
+  afterAll(async () => {
+    await degradedPrisma?.$disconnect()
+    await degradedServer?.stop()
+  })
+
+  async function startSession(): Promise<{ cookie: string; sessionId: string }> {
+    const anon = await fetch(`${degradedServer.baseUrl}/api/auth/anonymous-start`, {
+      method: 'POST'
+    })
+    const cookie = extractCookie(anon)!
+    const started = await fetch(`${degradedServer.baseUrl}/api/screening/start`, {
+      method: 'POST',
+      headers: { cookie }
+    })
+    const { sessionId } = await started.json()
+    return { cookie, sessionId }
+  }
+
+  it('still stores the free-text submission even though classification fails', async () => {
+    const { cookie, sessionId } = await startSession()
+
+    const response = await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/text`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'I feel hopeless today' })
+    })
+    expect(response.status).toBe(200)
+
+    const entry = await degradedPrisma.freeTextEntry.findFirst({ where: { sessionId } })
+    expect(entry).not.toBeNull()
+    const prediction = await degradedPrisma.modelPrediction.findFirst({ where: { sessionId } })
+    expect(prediction).toBeNull()
+  })
+
+  it('leaves a complete, unchanged-band session when the classifier is unreachable', async () => {
+    const { cookie, sessionId } = await startSession()
+
+    for (const item of [...PHQ9_ITEMS, ...GAD7_ITEMS]) {
+      await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/answer`, {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ itemCode: item.itemCode, rawValue: 0 })
+      })
+    }
+    await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/text`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'hopeless worthless give up completely' })
+    })
+
+    const response = await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/complete`, {
+      method: 'POST',
+      headers: { cookie }
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.riskLevel).toBe('MINIMAL') // unaffected — no signal reached triage at all
+    expect(Array.isArray(body.rationale)).toBe(true)
+    expect(body.rationale.length).toBeGreaterThan(0)
+  })
+
+  it('the result page reports the analysis was unavailable, not text-free', async () => {
+    const { cookie, sessionId } = await startSession()
+    for (const item of [...PHQ9_ITEMS, ...GAD7_ITEMS]) {
+      await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/answer`, {
+        method: 'POST',
+        headers: { cookie, 'content-type': 'application/json' },
+        body: JSON.stringify({ itemCode: item.itemCode, rawValue: 0 })
+      })
+    }
+    await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/text`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ text: 'some text the classifier never got to see' })
+    })
+    await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/complete`, {
+      method: 'POST',
+      headers: { cookie }
+    })
+
+    const response = await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/result`, {
+      headers: { cookie }
+    })
+    const body = await response.json()
+    expect(body.textAnalysis).toEqual({ available: false, reason: 'unavailable' })
   })
 })
