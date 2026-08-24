@@ -1,5 +1,14 @@
-# Minimal foundation only — pin exact versions and add a trained model's dependencies
-# (e.g. torch, transformers) when the classifier is actually implemented.
+# app/main.py currently runs a placeholder heuristic, not the trained model -- these two are
+# pinned ahead of that swap so the service's dependency footprint doesn't change when it lands.
+# Training code and the model artifact itself live in the separate research repo; only
+# inference-time dependencies belong here.
+torch>=2.4,<3.0
+transformers>=4.44,<5.0
+
 fastapi>=0.115,<1.0
 uvicorn[standard]>=0.32,<1.0
 pydantic>=2.9,<3.0
+
+# --- testing (services/classifier/tests/) -----------------------------------
+pytest>=8.3,<9.0
+httpx>=0.27,<1.0
