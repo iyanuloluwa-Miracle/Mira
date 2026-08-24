@@ -29,3 +29,33 @@ export const FILTERED_RESPONSE_MESSAGE =
 export const SESSION_LIMIT_MESSAGE =
   "We've reached the limit for this conversation. If you'd like to keep talking things " +
   'through, reaching out to a licensed professional is a good next step.'
+
+// ---------------------------------------------------------------------------------------------
+// [R6] Chat page chrome — never generated, always on screen. The header disclaimer is the
+// single most load-bearing sentence on this page for the thesis defence: it must state, in one
+// reading with no scrolling, that this is automated, not a therapist, and not for emergencies.
+export const CHAT_HEADER_TITLE = 'Talk it through'
+export const CHAT_HEADER_DISCLAIMER =
+  'Automated assistant for general information. Not a therapist. Not for emergencies.'
+
+export const CHAT_INPUT_PLACEHOLDER = 'Ask a question…'
+export const CHAT_SEND_BUTTON_LABEL = 'Send'
+export const CHAT_BACK_TO_RESULT_LABEL = 'Back to your result'
+
+// [FR3] Starting points only — never sent as-is without the person choosing to send them, and
+// never the only way to start (the input is always usable directly).
+export const CHAT_SUGGESTED_PROMPTS = [
+  'What does my score mean?',
+  'What is anxiety?',
+  'How do I talk to someone about this?'
+]
+
+export const CHAT_EMPTY_STATE_INTRO =
+  'You can ask about what your screening measured, general information about depression and ' +
+  'anxiety, or how to talk to someone about how you have been feeling.'
+
+// Shown only when the request itself failed (network error, service unreachable) — distinct
+// from LLM_UNAVAILABLE_MESSAGE above, which is a normal, graceful degraded reply from the
+// server. This one means the person got no reply at all, so it always offers a way out.
+export const CHAT_NETWORK_ERROR_MESSAGE =
+  "That message didn't send. You can try again, or go back to your result and resources."
