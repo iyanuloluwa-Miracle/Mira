@@ -6,6 +6,7 @@
 
 import { z } from 'zod'
 import type { TriageResult } from '@prisma/client'
+import { mapClassifierResultToPrediction } from '../../../domain/classifier-risk-mapping'
 import {
   IncompleteResponseError,
   InvalidResponseValueError,
@@ -14,6 +15,8 @@ import {
 } from '../../../domain/scoring'
 import { PHQ9_ITEM_NINE_CODE } from '../../../domain/instruments/phq9'
 import { computeTriage } from '../../../domain/triage'
+import type { ClassifierLabel } from '../../../domain/model-contract'
+import { buildTextAnalysis, type TextAnalysis } from '../../../utils/text-analysis'
 
 const bodySchema = z.object({}).strict()
 
@@ -30,13 +33,27 @@ export default defineEventHandler(async (event) => {
 
   const session = await prisma.screeningSession.findUnique({
     where: { id: sessionId },
-    include: { triageResult: true, itemResponses: true }
+    include: {
+      triageResult: true,
+      itemResponses: true,
+      freeTextEntries: { take: 1 },
+      modelPredictions: { orderBy: { createdAt: 'desc' }, take: 1 }
+    }
   })
   if (!session) notFoundError('Screening session not found.')
   if (session.userId !== user.id) forbiddenError('This screening session belongs to someone else.')
 
   if (session.status === 'COMPLETED' && session.triageResult) {
-    return buildResultPayload(session.triageResult, start)
+    // [FR3][NFR5] riskLevel is already known here (this session was completed before) — safe
+    // to build textAnalysis against the real value, unlike the fresh-completion path below
+    // where it isn't decided until computeTriage runs.
+    const textAnalysis = buildTextAnalysis({
+      freeTextExcluded: session.freeTextExcluded,
+      freeTextEntries: session.freeTextEntries,
+      modelPredictions: session.modelPredictions,
+      riskLevel: session.triageResult.riskLevel
+    })
+    return buildResultPayload(session.triageResult, textAnalysis, start)
   }
   if (session.status !== 'IN_PROGRESS') {
     badRequestError('This screening session can no longer be completed.')
@@ -59,10 +76,25 @@ export default defineEventHandler(async (event) => {
     throw error
   }
 
+  // [FR3][R1] At most one prediction per session in practice (the free-text step is one-shot —
+  // server/api/screening/[id]/text.post.ts), but modelPredictions is ordered/limited above
+  // defensively rather than assumed. Absent entirely whenever free text wasn't submitted, was
+  // excluded, or the classifier was unavailable at submission time — computeTriage already
+  // treats a missing modelPrediction as "no adjustment," so no branching is needed here beyond
+  // the lookup itself.
+  const latestPrediction = session.modelPredictions[0]
+  const modelPrediction = latestPrediction
+    ? mapClassifierResultToPrediction({
+        predictedLabel: latestPrediction.predictedLabel as ClassifierLabel,
+        probability: latestPrediction.probability
+      })
+    : undefined
+
   const triage = computeTriage({
     phq9: phq9Result.total,
     gad7: gad7Result.total,
-    itemNineValue: responses[PHQ9_ITEM_NINE_CODE]!
+    itemNineValue: responses[PHQ9_ITEM_NINE_CODE]!,
+    modelPrediction
   })
 
   const completedAt = new Date()
@@ -107,10 +139,19 @@ export default defineEventHandler(async (event) => {
     metadata: { riskLevel: triage.riskLevel, escalated: triage.escalate }
   })
 
-  return buildResultPayload(triageResult, start)
+  // [FR3][NFR5] Now that riskLevel is finally decided, safe to build — this is what keeps a
+  // CRISIS result from ever getting real spans computed against it, even transiently.
+  const textAnalysis = buildTextAnalysis({
+    freeTextExcluded: session.freeTextExcluded,
+    freeTextEntries: session.freeTextEntries,
+    modelPredictions: session.modelPredictions,
+    riskLevel: triage.riskLevel
+  })
+
+  return buildResultPayload(triageResult, textAnalysis, start)
 })
 
-function buildResultPayload(triageResult: TriageResult, start: number) {
+function buildResultPayload(triageResult: TriageResult, textAnalysis: TextAnalysis, start: number) {
   return {
     sessionId: triageResult.sessionId,
     phq9Total: triageResult.phq9Total,
@@ -120,6 +161,7 @@ function buildResultPayload(triageResult: TriageResult, start: number) {
     riskLevel: triageResult.riskLevel,
     rationale: triageResult.rationaleJson,
     escalated: triageResult.escalated,
+    textAnalysis,
     serverTimeMs: Date.now() - start
   }
 }
