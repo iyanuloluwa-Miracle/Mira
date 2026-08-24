@@ -20,6 +20,11 @@ export interface TestServer {
   // visible to that child process, so a test that wants to query the database directly (e.g.
   // to assert no plaintext email landed in a row) needs this to build its own PrismaClient.
   databaseUrl: string
+  // Everything the spawned process has written to stdout/stderr so far — for a test that needs
+  // to assert something never appeared in a log line (rule R4), not just that a response body
+  // was well-formed. Read at assertion time, not snapshotted at startup, since it keeps growing
+  // for the life of the process.
+  getOutput: () => string
   stop: () => Promise<void>
 }
 
@@ -89,7 +94,12 @@ async function waitForReady(baseUrl: string, child: ChildProcess, output: Output
   )
 }
 
-export async function startTestServer(): Promise<TestServer> {
+// envOverrides layers on top of the base env this helper builds (e.g. forcing
+// CLASSIFIER_MODE=http against an unreachable CLASSIFIER_SERVICE_URL, to test degradation
+// against a real spawned server rather than mocking the classifier module out entirely).
+export async function startTestServer(
+  envOverrides: Record<string, string> = {}
+): Promise<TestServer> {
   if (!existsSync('.output/server/index.mjs')) {
     throw new Error(
       'tests/integration expects .output/server/index.mjs to exist — run `npm run build` first.'
@@ -104,7 +114,8 @@ export async function startTestServer(): Promise<TestServer> {
     ENCRYPTION_KEY: randomBytes(32).toString('base64'),
     IDENTIFIER_HASH_PEPPER: randomBytes(32).toString('base64'),
     AUTH_SECRET: randomBytes(32).toString('base64'),
-    NODE_ENV: 'production'
+    NODE_ENV: 'production',
+    ...envOverrides
   }
 
   // PGlite's socket is an in-process TCP server that needs this process's event loop free to
@@ -166,6 +177,7 @@ export async function startTestServer(): Promise<TestServer> {
   return {
     baseUrl,
     databaseUrl,
+    getOutput: () => output.stdout + output.stderr,
     stop: async () => {
       child.kill()
       await pgServer.stop()
