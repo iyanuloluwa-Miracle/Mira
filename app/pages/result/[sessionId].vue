@@ -31,7 +31,11 @@ import {
   PHQ9_SCORE_RANGE_LABEL,
   RATIONALE_HEADING,
   RATIONALE_INTRO,
-  RESULT_BAND_INTRO_PREFIX
+  RESULT_BAND_INTRO_PREFIX,
+  TEXT_ANALYSIS_EXPLANATION,
+  TEXT_ANALYSIS_HEADING,
+  TEXT_ANALYSIS_TEXT_FREE_MESSAGE,
+  TEXT_ANALYSIS_UNAVAILABLE_MESSAGE
 } from '~/content/copy/postScreening'
 
 const route = useRoute()
@@ -143,6 +147,34 @@ useHead({ title: 'Your result' })
         <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-slate-700">
           <li v-for="(line, index) in result.rationale" :key="index">{{ line }}</li>
         </ul>
+      </section>
+
+      <!-- The text-analysis explanation (FR3, NFR5) — attribution spans over the user's own
+           text when available, otherwise a plain statement of why not. -->
+      <section>
+        <h2 class="text-lg font-semibold text-slate-900">{{ TEXT_ANALYSIS_HEADING }}</h2>
+        <template v-if="result.textAnalysis.available">
+          <p class="mt-1 text-sm text-slate-600">{{ TEXT_ANALYSIS_EXPLANATION }}</p>
+          <p
+            class="mt-3 rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm whitespace-pre-wrap text-slate-800"
+          >
+            <span
+              v-for="(span, index) in result.textAnalysis.spans"
+              :key="index"
+              :class="
+                span.highlighted ? 'rounded bg-amber-200 px-0.5 font-medium text-amber-950' : ''
+              "
+              >{{ span.text }}</span
+            >
+          </p>
+        </template>
+        <p v-else class="mt-1 text-sm text-slate-600">
+          {{
+            result.textAnalysis.reason === 'unavailable'
+              ? TEXT_ANALYSIS_UNAVAILABLE_MESSAGE
+              : TEXT_ANALYSIS_TEXT_FREE_MESSAGE
+          }}
+        </p>
       </section>
 
       <!-- 4. What this result is not. -->

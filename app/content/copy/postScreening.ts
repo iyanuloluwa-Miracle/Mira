@@ -79,6 +79,39 @@ export const NEXT_STEPS_BODY =
   'feeling.'
 
 // ---------------------------------------------------------------------------------------------
+// FREE-TEXT STEP — after the instruments, before finishing (FR3)
+// ---------------------------------------------------------------------------------------------
+
+export const FREE_TEXT_HEADING = 'In your own words, how have the last two weeks been?'
+export const FREE_TEXT_OPTIONAL_LABEL = 'Optional'
+export const FREE_TEXT_EXPLANATION =
+  'This is entirely optional and never required to finish your screening. If you write ' +
+  'something, it is encrypted, and a supplementary model looks at it alongside your answers — ' +
+  'it can only ever nudge your result up by one level, never set or lower it on its own. You ' +
+  'can also delete everything from this screening at any time from your result.'
+export const FREE_TEXT_CHARACTER_GUIDE = (remaining: number): string =>
+  `${remaining} characters left`
+export const FREE_TEXT_PLACEHOLDER = "Whatever feels relevant — there's no right answer."
+export const FREE_TEXT_CONTINUE_LABEL = 'Continue'
+export const FREE_TEXT_SKIP_LABEL = "Skip — I'd rather not write anything"
+export const FREE_TEXT_SUBMIT_ERROR =
+  "We couldn't save what you wrote. Please try again, or skip this step."
+
+// ---------------------------------------------------------------------------------------------
+// RESULT PAGE — the text-analysis explanation (NFR5)
+// ---------------------------------------------------------------------------------------------
+
+export const TEXT_ANALYSIS_HEADING = 'What your written answer showed'
+export const TEXT_ANALYSIS_EXPLANATION =
+  'The highlighted words are what the model paid the most attention to in what you wrote. ' +
+  'This shows what it attended to — it is not a clinical judgement.'
+export const TEXT_ANALYSIS_TEXT_FREE_MESSAGE =
+  'This result is based on your questionnaire answers only — no written response was analysed.'
+export const TEXT_ANALYSIS_UNAVAILABLE_MESSAGE =
+  'Text analysis was unavailable for what you wrote; this result is based on your ' +
+  'questionnaire answers alone.'
+
+// ---------------------------------------------------------------------------------------------
 // RESULT PAGE — deleting this session's data
 // ---------------------------------------------------------------------------------------------
 

@@ -15,6 +15,16 @@ interface ResponseOption {
   label: string
 }
 
+export interface AttributionSpan {
+  text: string
+  highlighted: boolean
+  attribution: number | null
+}
+
+export type TextAnalysis =
+  | { available: true; spans: AttributionSpan[] }
+  | { available: false; reason: 'text-free' | 'unavailable' }
+
 export interface ScreeningResult {
   riskLevel: string
   phq9Total: number
@@ -23,6 +33,7 @@ export interface ScreeningResult {
   gad7Band: string
   rationale: string[]
   escalated: boolean
+  textAnalysis: TextAnalysis
 }
 
 interface ScreeningState {
@@ -238,6 +249,30 @@ export function useScreeningSession() {
     }
   }
 
+  // [FR3] Submits the optional free-text answer. The typed text lives in this function's
+  // argument and the request body only — never persisted to localStorage (unlike numeric
+  // answers) and never stashed in state, since nothing here needs to redisplay it; the result
+  // page gets pre-computed attribution spans back from the server instead (see
+  // pages/result/[sessionId].vue), never the raw text itself.
+  async function submitFreeText(text: string): Promise<void> {
+    if (!state.value.sessionId) return
+    await $fetch(`/api/screening/${state.value.sessionId}/text`, {
+      method: 'POST',
+      body: { text }
+    })
+  }
+
+  // The per-session exclude setting (rule R7's "never require it" made explicit): marks this
+  // session as text-free server-side so the result page can say so, rather than the absence of
+  // a submission looking identical to "never got to this step."
+  async function skipFreeText(): Promise<void> {
+    if (!state.value.sessionId) return
+    await $fetch(`/api/screening/${state.value.sessionId}/text`, {
+      method: 'POST',
+      body: { skip: true }
+    })
+  }
+
   async function complete(): Promise<ScreeningResult> {
     if (!state.value.sessionId) throw new Error('No active screening session.')
 
@@ -306,6 +341,8 @@ export function useScreeningSession() {
     answerCurrent,
     goNext,
     goBack,
+    submitFreeText,
+    skipFreeText,
     complete,
     discard
   }
