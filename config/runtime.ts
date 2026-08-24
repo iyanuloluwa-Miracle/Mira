@@ -24,3 +24,31 @@ export function getClassifierConfig(): ClassifierConfig {
 
   return { mode, serviceUrl, timeoutMs }
 }
+
+export type LlmMode = 'http' | 'mock'
+
+export interface LlmConfig {
+  mode: LlmMode
+  apiKey: string | undefined
+  model: string
+  timeoutMs: number
+}
+
+const DEFAULT_LLM_TIMEOUT_MS = 8000
+const DEFAULT_LLM_MODEL = 'claude-sonnet-5'
+
+// [R6][R7] Defaults to 'mock' for the same reason getClassifierConfig() does — a fresh clone
+// or the test suite must not silently start making real, billed LLM calls. Explicitly requires
+// LLM_MODE="http" *and* a real LLM_API_KEY (checked by the client, not here) to reach the
+// actual provider; there is no "auto-detect from API key presence" path, so a stray key in the
+// environment during tests can't accidentally flip this on.
+export function getLlmConfig(): LlmConfig {
+  const mode = process.env.LLM_MODE === 'http' ? 'http' : 'mock'
+  const apiKey = process.env.LLM_API_KEY || undefined
+  const model = process.env.LLM_MODEL || DEFAULT_LLM_MODEL
+  const parsedTimeout = Number(process.env.LLM_TIMEOUT_MS)
+  const timeoutMs =
+    Number.isFinite(parsedTimeout) && parsedTimeout > 0 ? parsedTimeout : DEFAULT_LLM_TIMEOUT_MS
+
+  return { mode, apiKey, model, timeoutMs }
+}

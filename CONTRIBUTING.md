@@ -46,9 +46,18 @@ engineering review, before merge:
   decision.
 - `server/domain/safety.ts` — the crisis-detection and safety-routing rules, including the
   PHQ-9 item 9 override (rule R2).
+- `server/domain/conversation-safety.ts` — the bounded conversational layer's pre-filter and
+  post-filter (rule R6). Changing a phrase/pattern list here needs the same scrutiny as
+  changing triage.ts: it's the actual enforcement mechanism, not decoration. Any change must
+  keep every case in `server/domain/conversation-safety.test.ts`'s adversarial suite passing —
+  see `docs/llm-safety-tests.md`.
+- `server/services/conversation/system-prompt.ts` — what the conversational layer's LLM is
+  instructed to do and not do. Not the enforcement mechanism for rule R6 (the filters above
+  are), but still every word a person's conversation is shaped by.
 - `config/helplines.ts` — any human-support contact information shown to a user.
 - `app/content/copy/` — every string a distressed user might read, including crisis and
-  escalation copy (rule R3).
+  escalation copy (rule R3) and the conversational layer's fallback messages
+  (`app/content/copy/conversation.ts`).
 
 If you are not able to arrange that review yourself, open the PR as a draft, say so explicitly
 in the description, and a maintainer will help route it. Do not merge changes to these paths on

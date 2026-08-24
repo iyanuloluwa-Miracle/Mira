@@ -144,11 +144,12 @@ model ScreeningSession {
   // than silently showing nothing.
   freeTextExcluded Boolean       @default(false)
 
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  itemResponses    ItemResponse[]
-  freeTextEntries  FreeTextEntry[]
-  modelPredictions ModelPrediction[]
-  triageResult     TriageResult?
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemResponses     ItemResponse[]
+  freeTextEntries   FreeTextEntry[]
+  modelPredictions  ModelPrediction[]
+  triageResult      TriageResult?
+  conversationTurns ConversationTurn[]
 
   @@index([userId])
   @@map("screening_sessions")
@@ -204,6 +205,37 @@ model ModelPrediction {
 
   @@index([sessionId])
   @@map("model_predictions")
+}
+
+// [R6][NFR1] One request/response turn in the bounded conversational layer (component 4).
+// Metadata is always stored; the transcript itself only when RESEARCH_LOGGING consent was
+// active at the moment this turn was written (checked in server/api/conversation/, not here —
+// this schema has no opinion, it just has nullable transcript columns). preFilterTriggered
+// true means the LLM was never called for this turn at all (server/domain/conversation-safety.ts).
+model ConversationTurn {
+  id                   String   @id @default(uuid()) @db.Uuid
+  sessionId            String   @db.Uuid
+  turnNumber           Int
+  modelName            String
+  modelVersion         String
+  latencyMs            Int
+  promptTokens         Int
+  completionTokens     Int
+  preFilterTriggered   Boolean  @default(false)
+  preFilterReason      String?
+  postFilterTriggered  Boolean  @default(false)
+  postFilterReason     String?
+  // [R5] Present only with active RESEARCH_LOGGING consent — encrypted the same way as
+  // FreeTextEntry. Absent otherwise, not even as an empty placeholder.
+  transcriptCiphertext Bytes?
+  transcriptIv         Bytes?
+  transcriptAuthTag    Bytes?
+  createdAt            DateTime @default(now())
+
+  session ScreeningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("conversation_turns")
 }
 
 // [FR4][R1][NFR5] The one deterministic triage outcome for a session. rationaleJson holds
