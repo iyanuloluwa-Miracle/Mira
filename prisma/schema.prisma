@@ -263,17 +263,23 @@ model TriageResult {
 
 // [FR5] A psychoeducational resource. isActive is the deactivation mechanism — resources are
 // never hard-deleted once recommended, so historical ResourceRecommendation rows stay valid.
+// body holds the raw markdown authored in content/resources/*.md, ingested by prisma/seed.ts —
+// rendering to HTML happens per-request in server/api/resources/[slug].get.ts, not at seed time.
 model Resource {
-  id        String    @id @default(uuid()) @db.Uuid
-  title     String
-  slug      String    @unique
-  body      String
-  language  String    @default("en")
-  tags      String[]
-  minRisk   RiskLevel
-  maxRisk   RiskLevel
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  id                 String    @id @default(uuid()) @db.Uuid
+  title              String
+  slug               String    @unique
+  body               String
+  language           String    @default("en")
+  tags               String[]
+  minRisk            RiskLevel
+  maxRisk            RiskLevel
+  readingTimeMinutes Int
+  // [R10] A citable reference for this article's content, or a TODO_VERIFY placeholder — never
+  // fabricated. See server/plugins/warn-unverified-resource-sources.ts.
+  sourceAttribution  String
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
 
   recommendations ResourceRecommendation[]
 
