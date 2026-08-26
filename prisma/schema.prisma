@@ -67,20 +67,46 @@ enum ClinicianRole {
 // ANONYMOUS and every other field that could identify a person is nullable until/unless they
 // register.
 model User {
-  id           String    @id @default(uuid()) @db.Uuid
-  pseudonym    String    @unique
-  authMode     AuthMode  @default(ANONYMOUS)
-  emailHash    String?   @unique
-  passwordHash String?
-  ageBand      String?
-  createdAt    DateTime  @default(now())
-  lastSeenAt   DateTime  @default(now())
-  deletedAt    DateTime?
+  id              String    @id @default(uuid()) @db.Uuid
+  pseudonym       String    @unique
+  authMode        AuthMode  @default(ANONYMOUS)
+  emailHash       String?   @unique
+  // The email itself, encrypted (rule R5) so it can be decrypted server-side for delivery
+  // (e.g. a password-reset or notification email) without ever being queryable in plaintext.
+  // emailHash above is what login/registration actually look up by.
+  emailCiphertext Bytes?
+  emailIv         Bytes?
+  emailAuthTag    Bytes?
+  passwordHash    String?
+  ageBand         String?
+  createdAt       DateTime  @default(now())
+  lastSeenAt      DateTime  @default(now())
+  deletedAt       DateTime?
 
   consentRecords    ConsentRecord[]
   screeningSessions ScreeningSession[]
+  sessions          Session[]
 
   @@map("users")
+}
+
+// [FR1] A server-side session record backing an httpOnly session cookie. Only tokenHash is
+// stored — the raw token lives in the cookie and is never persisted — so a database read alone
+// can never be used to forge or hijack a session. expiresAt implements sliding expiry: it's
+// pushed forward (and the cookie re-issued) on activity by server/middleware/auth.ts, up to
+// SESSION_TTL_MS from the most recent request.
+model Session {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @db.Uuid
+  tokenHash  String   @unique
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  expiresAt  DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("sessions")
 }
 
 // [NFR1] One row per consent decision. granted/withdrawnAt lets a purpose's consent state be
@@ -112,12 +138,18 @@ model ScreeningSession {
   completedAt     DateTime?
   clientLatencyMs Int?
   serverLatencyMs Int?
+  // [FR3] Set when the person explicitly declines the optional free-text step (server/api/
+  // screening/[id]/text.post.ts's skip path) — distinct from simply never having called that
+  // endpoint, so the result page can say "you chose not to share a written response" rather
+  // than silently showing nothing.
+  freeTextExcluded Boolean       @default(false)
 
-  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  itemResponses    ItemResponse[]
-  freeTextEntries  FreeTextEntry[]
-  modelPredictions ModelPrediction[]
-  triageResult     TriageResult?
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemResponses     ItemResponse[]
+  freeTextEntries   FreeTextEntry[]
+  modelPredictions  ModelPrediction[]
+  triageResult      TriageResult?
+  conversationTurns ConversationTurn[]
 
   @@index([userId])
   @@map("screening_sessions")
@@ -173,6 +205,37 @@ model ModelPrediction {
 
   @@index([sessionId])
   @@map("model_predictions")
+}
+
+// [R6][NFR1] One request/response turn in the bounded conversational layer (component 4).
+// Metadata is always stored; the transcript itself only when RESEARCH_LOGGING consent was
+// active at the moment this turn was written (checked in server/api/conversation/, not here —
+// this schema has no opinion, it just has nullable transcript columns). preFilterTriggered
+// true means the LLM was never called for this turn at all (server/domain/conversation-safety.ts).
+model ConversationTurn {
+  id                   String   @id @default(uuid()) @db.Uuid
+  sessionId            String   @db.Uuid
+  turnNumber           Int
+  modelName            String
+  modelVersion         String
+  latencyMs            Int
+  promptTokens         Int
+  completionTokens     Int
+  preFilterTriggered   Boolean  @default(false)
+  preFilterReason      String?
+  postFilterTriggered  Boolean  @default(false)
+  postFilterReason     String?
+  // [R5] Present only with active RESEARCH_LOGGING consent — encrypted the same way as
+  // FreeTextEntry. Absent otherwise, not even as an empty placeholder.
+  transcriptCiphertext Bytes?
+  transcriptIv         Bytes?
+  transcriptAuthTag    Bytes?
+  createdAt            DateTime @default(now())
+
+  session ScreeningSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@map("conversation_turns")
 }
 
 // [FR4][R1][NFR5] The one deterministic triage outcome for a session. rationaleJson holds
