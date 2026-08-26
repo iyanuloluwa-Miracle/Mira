@@ -15,6 +15,16 @@ interface ResponseOption {
   label: string
 }
 
+export interface AttributionSpan {
+  text: string
+  highlighted: boolean
+  attribution: number | null
+}
+
+export type TextAnalysis =
+  | { available: true; spans: AttributionSpan[] }
+  | { available: false; reason: 'text-free' | 'unavailable' }
+
 export interface ScreeningResult {
   riskLevel: string
   phq9Total: number
@@ -23,6 +33,7 @@ export interface ScreeningResult {
   gad7Band: string
   rationale: string[]
   escalated: boolean
+  textAnalysis: TextAnalysis
 }
 
 interface ScreeningState {
@@ -33,6 +44,10 @@ interface ScreeningState {
   currentIndex: number
   pendingSync: string[]
   status: 'idle' | 'in-progress' | 'completing' | 'completed'
+  // Set by complete() so the result page can render the just-finished result with zero further
+  // fetches. Cleared (or simply absent, on a fresh session) for anything reached by direct
+  // navigation instead — see restore() and pages/result/[sessionId].vue.
+  result: ScreeningResult | null
 }
 
 function storageKey(sessionId: string): string {
@@ -74,6 +89,15 @@ function clearPersisted(sessionId: string): void {
 // and this must only ever be registered once regardless of how many call it.
 let onlineListenerRegistered = false
 
+// Module-level for the same reason, and specifically not inside ScreeningState: complete()
+// needs to wait for every answerCurrent() sync still genuinely in flight, not just ones that
+// have already failed. pendingSync (in ScreeningState) only ever gains an entry once a sync
+// has failed — a slow-but-not-yet-failed request is invisible to it, which let complete() fire
+// the server request before every answer had actually landed, and the server 400s having found
+// item(s) missing. Tracking in-flight promises here closes that gap.
+const inFlightSyncs = new Map<string, Promise<boolean>>()
+const inFlightTokens = new Map<string, symbol>()
+
 export function useScreeningSession() {
   const state = useState<ScreeningState>('screening-session', () => ({
     sessionId: null,
@@ -82,7 +106,8 @@ export function useScreeningSession() {
     answers: {},
     currentIndex: 0,
     pendingSync: [],
-    status: 'idle'
+    status: 'idle',
+    result: null
   }))
 
   const currentItem = computed<ScreeningItem | null>(
@@ -114,7 +139,8 @@ export function useScreeningSession() {
       answers: {},
       currentIndex: 0,
       pendingSync: [],
-      status: 'in-progress'
+      status: 'in-progress',
+      result: null
     }
 
     return response.sessionId
@@ -144,27 +170,47 @@ export function useScreeningSession() {
       answers: persisted.answers,
       currentIndex: persisted.currentIndex,
       pendingSync: Object.keys(persisted.answers),
-      status: 'in-progress'
+      status: 'in-progress',
+      result: null
     }
     await flushPending()
     return true
   }
 
-  async function syncAnswer(itemCode: string, rawValue: number): Promise<boolean> {
-    if (!state.value.sessionId) return false
-    try {
-      await $fetch(`/api/screening/${state.value.sessionId}/answer`, {
-        method: 'POST',
-        body: { itemCode, rawValue }
-      })
-      state.value.pendingSync = state.value.pendingSync.filter((code) => code !== itemCode)
-      return true
-    } catch {
-      if (!state.value.pendingSync.includes(itemCode)) {
-        state.value.pendingSync = [...state.value.pendingSync, itemCode]
+  function syncAnswer(itemCode: string, rawValue: number): Promise<boolean> {
+    if (!state.value.sessionId) return Promise.resolve(false)
+
+    // A token identifying this specific call, so the finally block below can tell whether it's
+    // still the most recent sync for this item by the time it settles, rather than needing to
+    // reference the promise it belongs to before that promise exists.
+    const token = Symbol(itemCode)
+    inFlightTokens.set(itemCode, token)
+
+    const promise = (async (): Promise<boolean> => {
+      try {
+        await $fetch(`/api/screening/${state.value.sessionId}/answer`, {
+          method: 'POST',
+          body: { itemCode, rawValue }
+        })
+        state.value.pendingSync = state.value.pendingSync.filter((code) => code !== itemCode)
+        return true
+      } catch {
+        if (!state.value.pendingSync.includes(itemCode)) {
+          state.value.pendingSync = [...state.value.pendingSync, itemCode]
+        }
+        return false
+      } finally {
+        // Only clear our own entry — a newer sync for the same item may already have replaced
+        // it (see answerCurrent, which overwrites rather than queues on rapid re-answering).
+        if (inFlightTokens.get(itemCode) === token) {
+          inFlightTokens.delete(itemCode)
+          inFlightSyncs.delete(itemCode)
+        }
       }
-      return false
-    }
+    })()
+
+    inFlightSyncs.set(itemCode, promise)
+    return promise
   }
 
   async function flushPending(): Promise<void> {
@@ -203,10 +249,38 @@ export function useScreeningSession() {
     }
   }
 
+  // [FR3] Submits the optional free-text answer. The typed text lives in this function's
+  // argument and the request body only — never persisted to localStorage (unlike numeric
+  // answers) and never stashed in state, since nothing here needs to redisplay it; the result
+  // page gets pre-computed attribution spans back from the server instead (see
+  // pages/result/[sessionId].vue), never the raw text itself.
+  async function submitFreeText(text: string): Promise<void> {
+    if (!state.value.sessionId) return
+    await $fetch(`/api/screening/${state.value.sessionId}/text`, {
+      method: 'POST',
+      body: { text }
+    })
+  }
+
+  // The per-session exclude setting (rule R7's "never require it" made explicit): marks this
+  // session as text-free server-side so the result page can say so, rather than the absence of
+  // a submission looking identical to "never got to this step."
+  async function skipFreeText(): Promise<void> {
+    if (!state.value.sessionId) return
+    await $fetch(`/api/screening/${state.value.sessionId}/text`, {
+      method: 'POST',
+      body: { skip: true }
+    })
+  }
+
   async function complete(): Promise<ScreeningResult> {
     if (!state.value.sessionId) throw new Error('No active screening session.')
 
     state.value.status = 'completing'
+    // Wait for every answer sync genuinely still in flight before even looking at pendingSync
+    // (which only reflects syncs that have already failed) — otherwise a slow-but-succeeding
+    // request can still be on the wire when the server is asked to complete the session.
+    await Promise.all([...inFlightSyncs.values()])
     await flushPending()
 
     if (state.value.pendingSync.length > 0) {
@@ -224,8 +298,28 @@ export function useScreeningSession() {
       method: 'POST'
     })) as unknown as ScreeningResult
     state.value.status = 'completed'
+    state.value.result = result
     clearPersisted(state.value.sessionId)
     return result
+  }
+
+  // [NFR1] Called after the server has deleted the session (see the "delete this result"
+  // control on pages/result/[sessionId].vue) so no trace of it lingers in memory or
+  // localStorage on this device.
+  function discard(sessionId: string): void {
+    clearPersisted(sessionId)
+    if (state.value.sessionId === sessionId) {
+      state.value = {
+        sessionId: null,
+        items: [],
+        responseOptions: [],
+        answers: {},
+        currentIndex: 0,
+        pendingSync: [],
+        status: 'idle',
+        result: null
+      }
+    }
   }
 
   if (import.meta.client && !onlineListenerRegistered) {
@@ -247,6 +341,9 @@ export function useScreeningSession() {
     answerCurrent,
     goNext,
     goBack,
-    complete
+    submitFreeText,
+    skipFreeText,
+    complete,
+    discard
   }
 }

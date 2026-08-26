@@ -1,7 +1,11 @@
-// [FR4][NFR5][R4] Returns the stored triage result for the owning user only. Accessing a
-// CRISIS result is itself audited, on top of the completion-time audit entry complete.post.ts
-// already writes — every read of sensitive crisis data gets its own trail entry, not just its
-// creation.
+// [FR4][NFR5][R3][R4] Returns the stored triage result for the owning user only, plus (for a
+// non-CRISIS result with a submitted, classified free-text entry) the attribution explanation —
+// see server/utils/text-analysis.ts for what that computes and why it's shared with
+// complete.post.ts. Accessing a CRISIS result is itself audited, on top of the completion-time
+// audit entry complete.post.ts already writes — every read of sensitive crisis data gets its
+// own trail entry, not just its creation.
+
+import { buildTextAnalysis } from '../../../utils/text-analysis'
 
 export default defineEventHandler(async (event) => {
   const start = Date.now()
@@ -12,7 +16,11 @@ export default defineEventHandler(async (event) => {
 
   const session = await prisma.screeningSession.findUnique({
     where: { id: sessionId },
-    include: { triageResult: true }
+    include: {
+      triageResult: true,
+      freeTextEntries: { take: 1 },
+      modelPredictions: { orderBy: { createdAt: 'desc' }, take: 1 }
+    }
   })
   if (!session) notFoundError('Screening session not found.')
   if (session.userId !== user.id) forbiddenError('This screening session belongs to someone else.')
@@ -28,6 +36,13 @@ export default defineEventHandler(async (event) => {
     })
   }
 
+  const textAnalysis = buildTextAnalysis({
+    freeTextExcluded: session.freeTextExcluded,
+    freeTextEntries: session.freeTextEntries,
+    modelPredictions: session.modelPredictions,
+    riskLevel: session.triageResult.riskLevel
+  })
+
   return {
     sessionId: session.id,
     phq9Total: session.triageResult.phq9Total,
@@ -37,6 +52,7 @@ export default defineEventHandler(async (event) => {
     riskLevel: session.triageResult.riskLevel,
     rationale: session.triageResult.rationaleJson,
     escalated: session.triageResult.escalated,
+    textAnalysis,
     serverTimeMs: Date.now() - start
   }
 })
