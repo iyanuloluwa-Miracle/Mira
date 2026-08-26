@@ -15,8 +15,37 @@ import {
 } from '../../../domain/scoring'
 import { PHQ9_ITEM_NINE_CODE } from '../../../domain/instruments/phq9'
 import { computeTriage } from '../../../domain/triage'
+import {
+  computeResourceRecommendations,
+  determineDrivingInstrument,
+  type RankedResource
+} from '../../../domain/resources'
 import type { ClassifierLabel } from '../../../domain/model-contract'
 import { buildTextAnalysis, type TextAnalysis } from '../../../utils/text-analysis'
+
+interface RecommendedResource {
+  slug: string
+  title: string
+  readingTimeMinutes: number
+}
+
+// [FR5] Reads back the ResourceRecommendation rows persisted at completion time, rather than
+// recomputing — recommendations, like the TriageResult itself, are decided once and then stay
+// stable for that session, even if the resource catalogue changes later. Duplicated (not
+// imported) in result.get.ts, matching this file's own buildResultPayload below, which is
+// likewise a small per-file helper rather than a cross-route import.
+async function loadRecommendedResources(triageResultId: string): Promise<RecommendedResource[]> {
+  const rows = await prisma.resourceRecommendation.findMany({
+    where: { triageResultId },
+    orderBy: { rank: 'asc' },
+    include: { resource: { select: { slug: true, title: true, readingTimeMinutes: true } } }
+  })
+  return rows.map((row) => ({
+    slug: row.resource.slug,
+    title: row.resource.title,
+    readingTimeMinutes: row.resource.readingTimeMinutes
+  }))
+}
 
 const bodySchema = z.object({}).strict()
 
@@ -53,7 +82,8 @@ export default defineEventHandler(async (event) => {
       modelPredictions: session.modelPredictions,
       riskLevel: session.triageResult.riskLevel
     })
-    return buildResultPayload(session.triageResult, textAnalysis, start)
+    const resources = await loadRecommendedResources(session.triageResult.id)
+    return buildResultPayload(session.triageResult, textAnalysis, resources, start)
   }
   if (session.status !== 'IN_PROGRESS') {
     badRequestError('This screening session can no longer be completed.')
@@ -100,7 +130,7 @@ export default defineEventHandler(async (event) => {
   const completedAt = new Date()
   const serverLatencyMs = Date.now() - start
 
-  const triageResult = await prisma.$transaction(async (tx) => {
+  const { triageResult, recommendedResources } = await prisma.$transaction(async (tx) => {
     const created = await tx.triageResult.create({
       data: {
         sessionId: session.id,
@@ -125,7 +155,45 @@ export default defineEventHandler(async (event) => {
       })
     }
 
-    return created
+    // [FR5] Recommendations are decided once, here, alongside the triage result they're derived
+    // from, and never recomputed later — see loadRecommendedResources above.
+    const candidates = await tx.resource.findMany({
+      where: { isActive: true },
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        tags: true,
+        minRisk: true,
+        maxRisk: true,
+        readingTimeMinutes: true,
+        isActive: true
+      }
+    })
+    const drivingInstrument = determineDrivingInstrument(phq9Result.band, gad7Result.band)
+    const ranked: RankedResource[] = computeResourceRecommendations(
+      candidates,
+      triage.riskLevel,
+      drivingInstrument
+    )
+    if (ranked.length > 0) {
+      await tx.resourceRecommendation.createMany({
+        data: ranked.map((resource) => ({
+          triageResultId: created.id,
+          resourceId: resource.resourceId,
+          rank: resource.rank
+        }))
+      })
+    }
+
+    return {
+      triageResult: created,
+      recommendedResources: ranked.map((resource): RecommendedResource => ({
+        slug: resource.slug,
+        title: resource.title,
+        readingTimeMinutes: resource.readingTimeMinutes
+      }))
+    }
   })
 
   // [FR7][R4] Every completion is audited — this also satisfies "any request touching a
@@ -148,10 +216,15 @@ export default defineEventHandler(async (event) => {
     riskLevel: triage.riskLevel
   })
 
-  return buildResultPayload(triageResult, textAnalysis, start)
+  return buildResultPayload(triageResult, textAnalysis, recommendedResources, start)
 })
 
-function buildResultPayload(triageResult: TriageResult, textAnalysis: TextAnalysis, start: number) {
+function buildResultPayload(
+  triageResult: TriageResult,
+  textAnalysis: TextAnalysis,
+  resources: RecommendedResource[],
+  start: number
+) {
   return {
     sessionId: triageResult.sessionId,
     phq9Total: triageResult.phq9Total,
@@ -162,6 +235,7 @@ function buildResultPayload(triageResult: TriageResult, textAnalysis: TextAnalys
     rationale: triageResult.rationaleJson,
     escalated: triageResult.escalated,
     textAnalysis,
+    resources,
     serverTimeMs: Date.now() - start
   }
 }

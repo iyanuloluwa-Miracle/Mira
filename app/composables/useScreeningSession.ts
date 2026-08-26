@@ -25,6 +25,14 @@ export type TextAnalysis =
   | { available: true; spans: AttributionSpan[] }
   | { available: false; reason: 'text-free' | 'unavailable' }
 
+// [FR5] What the resource-recommendation API returns per resource — just enough to link to and
+// label it; the full body only loads on the resource's own detail page.
+export interface RecommendedResource {
+  slug: string
+  title: string
+  readingTimeMinutes: number
+}
+
 export interface ScreeningResult {
   riskLevel: string
   phq9Total: number
@@ -34,6 +42,7 @@ export interface ScreeningResult {
   rationale: string[]
   escalated: boolean
   textAnalysis: TextAnalysis
+  resources: RecommendedResource[]
 }
 
 interface ScreeningState {

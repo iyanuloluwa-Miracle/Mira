@@ -21,8 +21,9 @@ import {
   GAD7_BAND_PHRASES,
   GAD7_SCORE_LABEL,
   GAD7_SCORE_RANGE_LABEL,
-  NEXT_STEPS_BODY,
+  NEXT_STEPS_EMPTY_FALLBACK,
   NEXT_STEPS_HEADING,
+  NEXT_STEPS_INTRO,
   NOT_A_DIAGNOSIS_CLOSING,
   NOT_A_DIAGNOSIS_HEADING,
   NOT_A_DIAGNOSIS_POINTS,
@@ -186,10 +187,29 @@ useHead({ title: 'Your result' })
         <p class="mt-3 text-sm text-amber-900">{{ NOT_A_DIAGNOSIS_CLOSING }}</p>
       </section>
 
-      <!-- 5. Recommended next steps and resources (full resource matching: prompt 15). -->
+      <!-- 5. Recommended next steps and resources (FR5). -->
       <section>
         <h2 class="text-lg font-semibold text-slate-900">{{ NEXT_STEPS_HEADING }}</h2>
-        <p class="mt-1 text-sm text-slate-700">{{ NEXT_STEPS_BODY }}</p>
+        <p class="mt-1 text-sm text-slate-700">{{ NEXT_STEPS_INTRO }}</p>
+
+        <ul v-if="result.resources.length > 0" class="mt-3 flex flex-col gap-2">
+          <li v-for="resource in result.resources" :key="resource.slug">
+            <NuxtLink
+              :to="`/resources/${resource.slug}`"
+              class="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 hover:bg-slate-50"
+            >
+              <span class="text-sm font-medium text-slate-900">{{ resource.title }}</span>
+              <span class="shrink-0 text-xs text-slate-500"
+                >{{ resource.readingTimeMinutes }} min read</span
+              >
+            </NuxtLink>
+          </li>
+        </ul>
+        <p v-else class="mt-3 text-sm text-slate-700">{{ NEXT_STEPS_EMPTY_FALLBACK }}</p>
+
+        <NuxtLink to="/resources" class="mt-3 inline-block text-sm text-indigo-700 underline">
+          Browse the full resource library
+        </NuxtLink>
       </section>
 
       <!-- 6. Delete this session's data immediately. -->
