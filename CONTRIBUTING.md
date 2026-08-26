@@ -58,6 +58,10 @@ engineering review, before merge:
 - `app/content/copy/` — every string a distressed user might read, including crisis and
   escalation copy (rule R3) and the conversational layer's fallback messages
   (`app/content/copy/conversation.ts`).
+- `content/resources/` — every psychoeducational article's body copy, and any change to a
+  `sourceAttribution` field. A `TODO_VERIFY` placeholder must not be replaced with a citation
+  from memory, a search result, or a model — verify it directly, the same discipline rule R10
+  requires for helpline numbers (see `server/plugins/warn-unverified-resource-sources.ts`).
 
 If you are not able to arrange that review yourself, open the PR as a draft, say so explicitly
 in the description, and a maintainer will help route it. Do not merge changes to these paths on
