@@ -37,6 +37,16 @@ Node version is pinned in [.nvmrc](.nvmrc); use `nvm use` (or equivalent) before
 - Relevant docs under `docs/` are updated if the change affects architecture, data model, or a
   documented control.
 
+## The clinician auth realm
+
+The clinician auth realm and the person-being-screened auth realm never share a table, a
+session type, or a login page. Concretely: `Clinician`/`ClinicianSession` (never `User`/
+`Session`), the `mira_clinician_session` cookie (never `mira_session`), `server/utils/
+clinician-auth.ts`'s `requireClinician`/`requireAdmin` (never `requireUser`), and
+`server/middleware/clinician-auth.ts` (never `server/middleware/auth.ts`). A change that has a
+clinician-facing route call `requireUser`, or a user-facing route read `event.context.clinician`,
+is a bug regardless of whether it happens to behave correctly in the moment.
+
 ## Changes to safety-critical code
 
 The following require review by someone with a clinical background, in addition to normal
@@ -51,6 +61,11 @@ engineering review, before merge:
   changing triage.ts: it's the actual enforcement mechanism, not decoration. Any change must
   keep every case in `server/domain/conversation-safety.test.ts`'s adversarial suite passing —
   see `docs/llm-safety-tests.md`.
+- `server/domain/consent.ts` — the consent-aware escalation branch (FR6): whether an
+  escalate-worthy result becomes an identifiable record a clinician can see, and whether a
+  clinician's detail view is allowed to show free text. This is the actual enforcement
+  mechanism for that branch, not decoration — see `docs/data-model.md`'s Escalation/ConsentRecord
+  sections for the full reasoning.
 - `server/services/conversation/system-prompt.ts` — what the conversational layer's LLM is
   instructed to do and not do. Not the enforcement mechanism for rule R6 (the filters above
   are), but still every word a person's conversation is shaped by.

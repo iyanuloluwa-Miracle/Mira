@@ -19,6 +19,7 @@ erDiagram
     TRIAGE_RESULT ||--o| ESCALATION : "may trigger"
     RESOURCE ||--o{ RESOURCE_RECOMMENDATION : "recommended via"
     CLINICIAN |o--o{ ESCALATION : handles
+    CLINICIAN ||--o{ CLINICIAN_SESSION : "signs in with"
 
     USER {
         uuid id PK
@@ -46,7 +47,7 @@ erDiagram
         uuid id PK
         uuid userId FK
         string consentVersion
-        enum purpose "SCREENING or RESEARCH_LOGGING"
+        enum purpose "SCREENING, RESEARCH_LOGGING, or HUMAN_REVIEW"
         boolean granted
         datetime grantedAt
         datetime withdrawnAt "nullable"
@@ -125,7 +126,9 @@ erDiagram
         enum status "PENDING, ACKNOWLEDGED, CONTACTED, CLOSED"
         uuid clinicianId FK "nullable"
         datetime acknowledgedAt "nullable"
-        bytes notesCiphertext "nullable"
+        bytes notesCiphertext "nullable, AES-256-GCM"
+        bytes notesIv "nullable"
+        bytes notesAuthTag "nullable"
         datetime createdAt
     }
     CLINICIAN {
@@ -135,6 +138,14 @@ erDiagram
         string fullName
         enum role "CLINICIAN or ADMIN"
         boolean isActive
+    }
+    CLINICIAN_SESSION {
+        uuid id PK
+        uuid clinicianId FK
+        string tokenHash UK "keyed hash of the cookie token — raw token never stored"
+        datetime createdAt
+        datetime lastSeenAt
+        datetime expiresAt "sliding — extended on activity"
     }
 ```
 
@@ -175,8 +186,23 @@ abandoned session still expires.
 One row per consent decision, not a single mutable flag. `granted` plus `withdrawnAt` lets the
 system reconstruct what a person had and hadn't consented to at any point in time, which is
 what a Nigeria Data Protection Act 2023 accountability review needs to see. `purpose` separates
-consent to be screened at all from consent to have (research-only) interaction data logged —
-the latter defaults to off everywhere it's asked, per CLAUDE.md.
+consent to be screened at all, consent to have (research-only) interaction data logged, and
+consent to have an escalate-worthy result reviewed by a human clinician (`HUMAN_REVIEW`) — all
+three default to off everywhere they're asked, per CLAUDE.md.
+
+`HUMAN_REVIEW` is the consent-aware branch FR6 requires, made explicit here and in
+`server/domain/consent.ts`: an escalate-worthy `TriageResult` (`escalated = true`) does **not**
+by itself create an `Escalation` row. `server/api/screening/[id]/complete.post.ts` checks for an
+_active_ `HUMAN_REVIEW` grant (`canCreateEscalationRecord`) before creating one; without it, the
+person still sees the referral screen and helplines (`app/components/safety/ReferralScreen.vue`)
+— every escalate-worthy result gets that, unconditionally — but no row is created, so nothing
+identifiable enters the clinician queue. The same screen offers an explicit "share this with a
+clinician" action (`server/api/screening/[id]/escalate.post.ts`) that grants `HUMAN_REVIEW`
+consent and creates the row together, as informed consent given _after_ the person has already
+seen their result. A later withdrawal of `HUMAN_REVIEW` does not delete an already-created
+`Escalation` row (the case history is a fact about what happened), but it does immediately stop
+a clinician's detail view from showing that person's free text — `canRevealFreeTextToClinician`
+re-checks the _current_ grant on every read, independently of whether the row itself exists.
 
 ### ScreeningSession (FR2)
 
@@ -228,19 +254,28 @@ already happened. The foreign key from `ResourceRecommendation` to `Resource` us
 
 ### Escalation (FR6, FR7)
 
-Created when a `TriageResult` crosses the escalation threshold. `clinicianId` is nullable and,
-if a clinician account is later removed, is set to `null` rather than cascading the deletion —
-the case history has to survive staff turnover. `notesCiphertext` follows the same
-encrypt-before-you-query discipline as `FreeTextEntry.ciphertext`, though clinician notes carry
-their own `iv`/`authTag` at the application layer once `server/utils/crypto.ts` exists.
+Created only when a `TriageResult` crosses the escalation threshold _and_ `HUMAN_REVIEW`
+consent is active — see the `ConsentRecord` section above for the full consent-aware branch.
+`clinicianId` is nullable and, if a clinician account is later removed, is set to `null` rather
+than cascading the deletion — the case history has to survive staff turnover.
+`notesCiphertext`/`notesIv`/`notesAuthTag` follow the same encrypt-before-you-query discipline
+as `FreeTextEntry`'s three columns (`server/utils/crypto.ts`'s `encryptField`/`decryptField`),
+written by `server/api/clinician/escalations/[id].patch.ts`.
 
 ### Clinician (FR7)
 
-A deliberately separate account type from `User` — see CONTRIBUTING.md on why the clinician
-auth realm and the person-being-screened auth realm never share a table, a session type, or a
-login page. Unlike `User.emailHash`, `Clinician.email` is stored in the clear: clinicians are
-staff, not the vulnerable population NFR1's protections are built around, and they need to be
-contactable by that address.
+A deliberately separate account type from `User` — see [CONTRIBUTING.md](../CONTRIBUTING.md#the-clinician-auth-realm)
+on why the clinician auth realm and the person-being-screened auth realm never share a table, a
+session type, or a login page. Unlike `User.emailHash`, `Clinician.email` is stored in the
+clear: clinicians are staff, not the vulnerable population NFR1's protections are built around,
+and they need to be contactable by that address.
+
+### ClinicianSession (FR7)
+
+The clinician-realm counterpart to `Session` — same shape, same sliding-expiry discipline
+(`server/middleware/clinician-auth.ts`), but its own table, backing its own
+`mira_clinician_session` cookie, so it can never be confused with a person-being-screened
+session even in the same browser.
 
 ### Audit trail
 
