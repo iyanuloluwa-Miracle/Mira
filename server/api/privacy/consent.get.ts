@@ -4,7 +4,9 @@
 
 import { z } from 'zod'
 
-const querySchema = z.object({ purpose: z.enum(['SCREENING', 'RESEARCH_LOGGING']) }).strict()
+const querySchema = z
+  .object({ purpose: z.enum(['SCREENING', 'RESEARCH_LOGGING', 'HUMAN_REVIEW']) })
+  .strict()
 
 export default defineEventHandler(async (event) => {
   const user = requireUser(event)

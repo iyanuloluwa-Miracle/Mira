@@ -60,6 +60,13 @@ export default defineEventHandler(async (event) => {
     riskLevel: session.triageResult.riskLevel
   })
   const resources = await loadRecommendedResources(session.triageResult.id)
+  // [FR6][NFR1] Whether this result actually entered the clinician queue — see
+  // server/domain/consent.ts and complete.post.ts's own comment on the same check. Re-derived
+  // from whether a row exists, not stored redundantly on TriageResult.
+  const escalation = await prisma.escalation.findUnique({
+    where: { triageResultId: session.triageResult.id },
+    select: { id: true }
+  })
 
   return {
     sessionId: session.id,
@@ -70,6 +77,7 @@ export default defineEventHandler(async (event) => {
     riskLevel: session.triageResult.riskLevel,
     rationale: session.triageResult.rationaleJson,
     escalated: session.triageResult.escalated,
+    escalationRecorded: !!escalation,
     textAnalysis,
     resources,
     serverTimeMs: Date.now() - start

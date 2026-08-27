@@ -20,8 +20,10 @@ import {
   determineDrivingInstrument,
   type RankedResource
 } from '../../../domain/resources'
+import { canCreateEscalationRecord } from '../../../domain/consent'
 import type { ClassifierLabel } from '../../../domain/model-contract'
 import { buildTextAnalysis, type TextAnalysis } from '../../../utils/text-analysis'
+import { createNotificationService } from '../../../services/notification'
 
 interface RecommendedResource {
   slug: string
@@ -83,7 +85,17 @@ export default defineEventHandler(async (event) => {
       riskLevel: session.triageResult.riskLevel
     })
     const resources = await loadRecommendedResources(session.triageResult.id)
-    return buildResultPayload(session.triageResult, textAnalysis, resources, start)
+    const existingEscalation = await prisma.escalation.findUnique({
+      where: { triageResultId: session.triageResult.id },
+      select: { id: true }
+    })
+    return buildResultPayload(
+      session.triageResult,
+      textAnalysis,
+      resources,
+      !!existingEscalation,
+      start
+    )
   }
   if (session.status !== 'IN_PROGRESS') {
     badRequestError('This screening session can no longer be completed.')
@@ -130,71 +142,96 @@ export default defineEventHandler(async (event) => {
   const completedAt = new Date()
   const serverLatencyMs = Date.now() - start
 
-  const { triageResult, recommendedResources } = await prisma.$transaction(async (tx) => {
-    const created = await tx.triageResult.create({
-      data: {
-        sessionId: session.id,
-        phq9Total: phq9Result.total,
-        gad7Total: gad7Result.total,
-        phq9Band: phq9Result.band,
-        gad7Band: gad7Result.band,
-        riskLevel: triage.riskLevel,
-        rationaleJson: triage.rationale,
-        escalated: triage.escalate
-      }
-    })
-
-    await tx.screeningSession.update({
-      where: { id: session.id },
-      data: { status: 'COMPLETED', completedAt, serverLatencyMs }
-    })
-
-    if (triage.escalate) {
-      await tx.escalation.create({
-        data: { triageResultId: created.id, status: 'PENDING' }
+  // [FR6][NFR1] The consent-aware escalation branch (server/domain/consent.ts): an
+  // escalate-worthy result only becomes an identifiable Escalation row a clinician can see if
+  // HUMAN_REVIEW consent is already active. If not, escalated stays true on the TriageResult
+  // (it's a fact about the result, not consent-gated) and the person still sees the referral
+  // screen and helplines client-side (result.get.ts, app/pages/result/[sessionId].vue) — they
+  // can also opt in after the fact from that screen, via
+  // server/api/screening/[id]/escalate.post.ts, which is the other place this same check runs.
+  const consentRecords = triage.escalate
+    ? await prisma.consentRecord.findMany({
+        where: { userId: user.id, purpose: 'HUMAN_REVIEW' },
+        select: { purpose: true, granted: true, withdrawnAt: true }
       })
-    }
+    : []
+  const shouldEscalate = triage.escalate && canCreateEscalationRecord(consentRecords)
 
-    // [FR5] Recommendations are decided once, here, alongside the triage result they're derived
-    // from, and never recomputed later — see loadRecommendedResources above.
-    const candidates = await tx.resource.findMany({
-      where: { isActive: true },
-      select: {
-        id: true,
-        slug: true,
-        title: true,
-        tags: true,
-        minRisk: true,
-        maxRisk: true,
-        readingTimeMinutes: true,
-        isActive: true
+  const { triageResult, recommendedResources, escalation } = await prisma.$transaction(
+    async (tx) => {
+      const created = await tx.triageResult.create({
+        data: {
+          sessionId: session.id,
+          phq9Total: phq9Result.total,
+          gad7Total: gad7Result.total,
+          phq9Band: phq9Result.band,
+          gad7Band: gad7Result.band,
+          riskLevel: triage.riskLevel,
+          rationaleJson: triage.rationale,
+          escalated: triage.escalate
+        }
+      })
+
+      await tx.screeningSession.update({
+        where: { id: session.id },
+        data: { status: 'COMPLETED', completedAt, serverLatencyMs }
+      })
+
+      const escalation = shouldEscalate
+        ? await tx.escalation.create({
+            data: { triageResultId: created.id, status: 'PENDING' }
+          })
+        : null
+
+      // [FR5] Recommendations are decided once, here, alongside the triage result they're
+      // derived from, and never recomputed later — see loadRecommendedResources above.
+      const candidates = await tx.resource.findMany({
+        where: { isActive: true },
+        select: {
+          id: true,
+          slug: true,
+          title: true,
+          tags: true,
+          minRisk: true,
+          maxRisk: true,
+          readingTimeMinutes: true,
+          isActive: true
+        }
+      })
+      const drivingInstrument = determineDrivingInstrument(phq9Result.band, gad7Result.band)
+      const ranked: RankedResource[] = computeResourceRecommendations(
+        candidates,
+        triage.riskLevel,
+        drivingInstrument
+      )
+      if (ranked.length > 0) {
+        await tx.resourceRecommendation.createMany({
+          data: ranked.map((resource) => ({
+            triageResultId: created.id,
+            resourceId: resource.resourceId,
+            rank: resource.rank
+          }))
+        })
       }
-    })
-    const drivingInstrument = determineDrivingInstrument(phq9Result.band, gad7Result.band)
-    const ranked: RankedResource[] = computeResourceRecommendations(
-      candidates,
-      triage.riskLevel,
-      drivingInstrument
-    )
-    if (ranked.length > 0) {
-      await tx.resourceRecommendation.createMany({
-        data: ranked.map((resource) => ({
-          triageResultId: created.id,
-          resourceId: resource.resourceId,
-          rank: resource.rank
+
+      return {
+        triageResult: created,
+        escalation,
+        recommendedResources: ranked.map((resource): RecommendedResource => ({
+          slug: resource.slug,
+          title: resource.title,
+          readingTimeMinutes: resource.readingTimeMinutes
         }))
-      })
-    }
-
-    return {
-      triageResult: created,
-      recommendedResources: ranked.map((resource): RecommendedResource => ({
-        slug: resource.slug,
-        title: resource.title,
-        readingTimeMinutes: resource.readingTimeMinutes
-      }))
-    }
-  })
+      }
+    },
+    // [NFR4] This transaction now does real work end to end (triage, an optional Escalation
+    // row, a resource query, and ranked ResourceRecommendation rows) against Neon's real,
+    // variable cross-region latency — Prisma's 5s default interactive-transaction timeout was
+    // observed failing a real completion under e2e load with P2028 ("transaction not found",
+    // Neon having recycled the connection before the transaction finished). A slow-but-honest
+    // completion must not fail outright for someone who may be in crisis.
+    { timeout: 15_000, maxWait: 10_000 }
+  )
 
   // [FR7][R4] Every completion is audited — this also satisfies "any request touching a
   // CRISIS result writes an AuditLog entry" for this endpoint, since it logs unconditionally.
@@ -204,8 +241,23 @@ export default defineEventHandler(async (event) => {
     action: 'SCREENING_COMPLETED',
     entityType: 'ScreeningSession',
     entityId: session.id,
-    metadata: { riskLevel: triage.riskLevel, escalated: triage.escalate }
+    metadata: {
+      riskLevel: triage.riskLevel,
+      escalated: triage.escalate,
+      escalationRecorded: !!escalation
+    }
   })
+
+  // [FR6] Best-effort — see ConsoleNotificationService, which never lets a failure here
+  // propagate and turn into a failed screening completion (rule R7).
+  if (escalation) {
+    await createNotificationService().notifyEscalation({
+      escalationId: escalation.id,
+      riskLevel: triage.riskLevel,
+      pseudonym: user.pseudonym,
+      createdAt: escalation.createdAt
+    })
+  }
 
   // [FR3][NFR5] Now that riskLevel is finally decided, safe to build — this is what keeps a
   // CRISIS result from ever getting real spans computed against it, even transiently.
@@ -216,13 +268,14 @@ export default defineEventHandler(async (event) => {
     riskLevel: triage.riskLevel
   })
 
-  return buildResultPayload(triageResult, textAnalysis, recommendedResources, start)
+  return buildResultPayload(triageResult, textAnalysis, recommendedResources, !!escalation, start)
 })
 
 function buildResultPayload(
   triageResult: TriageResult,
   textAnalysis: TextAnalysis,
   resources: RecommendedResource[],
+  escalationRecorded: boolean,
   start: number
 ) {
   return {
@@ -234,6 +287,7 @@ function buildResultPayload(
     riskLevel: triageResult.riskLevel,
     rationale: triageResult.rationaleJson,
     escalated: triageResult.escalated,
+    escalationRecorded,
     textAnalysis,
     resources,
     serverTimeMs: Date.now() - start
