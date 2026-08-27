@@ -24,9 +24,15 @@ enum AuthMode {
   ANONYMOUS
 }
 
+// [FR6][NFR1] HUMAN_REVIEW gates whether an escalate-worthy result becomes an identifiable
+// Escalation row a clinician can see — see server/domain/consent.ts. Distinct from SCREENING
+// (using the app at all) and RESEARCH_LOGGING (storing a conversation transcript): a person can
+// use every other part of Mira, including seeing their own escalation-worthy result and the
+// referral information and helplines, without ever granting this one.
 enum ConsentPurpose {
   SCREENING
   RESEARCH_LOGGING
+  HUMAN_REVIEW
 }
 
 enum Instrument {
@@ -263,17 +269,23 @@ model TriageResult {
 
 // [FR5] A psychoeducational resource. isActive is the deactivation mechanism — resources are
 // never hard-deleted once recommended, so historical ResourceRecommendation rows stay valid.
+// body holds the raw markdown authored in content/resources/*.md, ingested by prisma/seed.ts —
+// rendering to HTML happens per-request in server/api/resources/[slug].get.ts, not at seed time.
 model Resource {
-  id        String    @id @default(uuid()) @db.Uuid
-  title     String
-  slug      String    @unique
-  body      String
-  language  String    @default("en")
-  tags      String[]
-  minRisk   RiskLevel
-  maxRisk   RiskLevel
-  isActive  Boolean   @default(true)
-  createdAt DateTime  @default(now())
+  id                 String    @id @default(uuid()) @db.Uuid
+  title              String
+  slug               String    @unique
+  body               String
+  language           String    @default("en")
+  tags               String[]
+  minRisk            RiskLevel
+  maxRisk            RiskLevel
+  readingTimeMinutes Int
+  // [R10] A citable reference for this article's content, or a TODO_VERIFY placeholder — never
+  // fabricated. See server/plugins/warn-unverified-resource-sources.ts.
+  sourceAttribution  String
+  isActive           Boolean   @default(true)
+  createdAt          DateTime  @default(now())
 
   recommendations ResourceRecommendation[]
 
@@ -296,9 +308,16 @@ model ResourceRecommendation {
   @@map("resource_recommendations")
 }
 
-// [FR6][FR7] Human-support follow-up for one triage result. clinicianId is nullable and set
-// to null (not cascaded away) if a clinician account is later removed, so the case history
-// survives staff turnover.
+// [FR6][FR7][NFR1] Human-support follow-up for one triage result. Only ever created when
+// HUMAN_REVIEW consent is active at the moment of creation (server/domain/consent.ts) — an
+// escalate-worthy result with no such consent gets a referral screen and helplines client-side
+// but never a row here (see server/api/screening/[id]/complete.post.ts and
+// server/api/screening/[id]/escalate.post.ts, the two places a row can be created). Once
+// created, a row is never deleted for a later consent withdrawal — the case history is a fact
+// about what happened, not a live mirror of current consent — but notesCiphertext's sibling
+// free-text field on the same detail view re-checks live consent on every read (rule R4/NFR1).
+// clinicianId is nullable and set to null (not cascaded away) if a clinician account is later
+// removed, so the case history survives staff turnover.
 model Escalation {
   id              String           @id @default(uuid()) @db.Uuid
   triageResultId  String           @unique @db.Uuid
@@ -306,6 +325,8 @@ model Escalation {
   clinicianId     String?          @db.Uuid
   acknowledgedAt  DateTime?
   notesCiphertext Bytes?
+  notesIv         Bytes?
+  notesAuthTag    Bytes?
   createdAt       DateTime         @default(now())
 
   triageResult TriageResult @relation(fields: [triageResultId], references: [id], onDelete: Cascade)
@@ -316,8 +337,12 @@ model Escalation {
   @@map("escalations")
 }
 
-// [FR7] A clinician/admin account. Deliberately separate from User — see CONTRIBUTING.md on
-// keeping the clinician auth realm distinct from the person-being-screened auth realm.
+// [FR7] A clinician/admin account. Deliberately separate from User — the clinician auth realm
+// and the person-being-screened auth realm never share a table, a session type, or a login
+// page (see CONTRIBUTING.md and ClinicianSession below, the clinician-realm counterpart to
+// Session). Unlike User.emailHash, Clinician.email is stored in the clear: clinicians are
+// staff, not the vulnerable population NFR1's protections are built around, and they need to
+// be contactable by that address.
 model Clinician {
   id           String        @id @default(uuid()) @db.Uuid
   email        String        @unique
@@ -326,9 +351,29 @@ model Clinician {
   role         ClinicianRole @default(CLINICIAN)
   isActive     Boolean       @default(true)
 
-  escalations Escalation[]
+  escalations       Escalation[]
+  clinicianSessions ClinicianSession[]
 
   @@map("clinicians")
+}
+
+// [FR7] A server-side session record backing the clinician-realm httpOnly session cookie —
+// the exact same shape and sliding-expiry discipline as Session (server/middleware/auth.ts),
+// but a distinct table and a distinct cookie name (server/utils/clinician-auth.ts) so a
+// clinician session and a person-being-screened session can never be confused for one another,
+// including by two different pieces of middleware reading two different cookies.
+model ClinicianSession {
+  id          String   @id @default(uuid()) @db.Uuid
+  clinicianId String   @db.Uuid
+  tokenHash   String   @unique
+  createdAt   DateTime @default(now())
+  lastSeenAt  DateTime @default(now())
+  expiresAt   DateTime
+
+  clinician Clinician @relation(fields: [clinicianId], references: [id], onDelete: Cascade)
+
+  @@index([clinicianId])
+  @@map("clinician_sessions")
 }
 
 // [R4][NFR1] Append-only audit trail. metadataJson must never carry PHI or free text — the

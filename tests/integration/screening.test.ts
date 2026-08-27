@@ -395,9 +395,19 @@ describe('idempotent answer replay', () => {
 })
 
 describe('item 9 positive -> CRISIS with an Escalation row', () => {
-  it('produces a CRISIS result, escalated=true, and a PENDING Escalation row', async () => {
+  it('produces a CRISIS result, escalated=true, and — with active HUMAN_REVIEW consent — a PENDING Escalation row', async () => {
     const cookie = await startAnonymousSession()
     const { sessionId } = await startScreening(cookie)
+
+    // [FR6][NFR1] Escalation-row creation is consent-gated (server/domain/consent.ts) —
+    // granting HUMAN_REVIEW here is what makes the row-creation assertion below meaningful; a
+    // CRISIS result with no such consent still reports escalated=true but creates no row, which
+    // is covered separately in tests/integration/clinician.test.ts.
+    await fetch(`${server.baseUrl}/api/privacy/consent`, {
+      method: 'POST',
+      headers: { cookie, 'content-type': 'application/json' },
+      body: JSON.stringify({ purpose: 'HUMAN_REVIEW', granted: true, consentVersion: '1' })
+    })
 
     await answerAll(cookie, sessionId, { ...allItemsAtZero(), PHQ9_Q9: 1 })
 
@@ -409,6 +419,7 @@ describe('item 9 positive -> CRISIS with an Escalation row', () => {
 
     expect(body.riskLevel).toBe('CRISIS')
     expect(body.escalated).toBe(true)
+    expect(body.escalationRecorded).toBe(true)
 
     const triageResult = await prisma.triageResult.findUnique({ where: { sessionId } })
     expect(triageResult?.riskLevel).toBe('CRISIS')
