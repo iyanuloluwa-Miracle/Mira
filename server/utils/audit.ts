@@ -4,6 +4,7 @@
 // discipline is enforced here by convention and by review, not by code.
 
 import type { Prisma } from '@prisma/client'
+import { prisma } from './db'
 
 export type AuditActorType = 'USER' | 'CLINICIAN' | 'SYSTEM'
 
