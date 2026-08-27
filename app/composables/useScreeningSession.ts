@@ -41,6 +41,7 @@ export interface ScreeningResult {
   gad7Band: string
   rationale: string[]
   escalated: boolean
+  escalationRecorded: boolean
   textAnalysis: TextAnalysis
   resources: RecommendedResource[]
 }

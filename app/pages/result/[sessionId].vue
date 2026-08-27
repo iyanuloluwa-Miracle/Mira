@@ -66,6 +66,9 @@ onMounted(async () => {
 })
 
 const showCrisis = computed(() => result.value?.riskLevel === 'CRISIS')
+// [FR6] CRISIS keeps its own unconditional interrupt above — this is only for the other
+// escalate-worthy band (HIGH), which still shows the normal result content plus this section.
+const showReferral = computed(() => !!result.value?.escalated && !showCrisis.value)
 
 const bandIntro = computed(() => {
   if (!result.value) return ''
@@ -122,6 +125,13 @@ useHead({ title: 'Your result' })
     <div v-else-if="result" class="mt-6 flex flex-col gap-8">
       <!-- 1. The band, in plain language. Never a diagnosis, never a disorder name as a conclusion. -->
       <h1 class="text-2xl font-semibold text-slate-900">{{ bandIntro }}</h1>
+
+      <!-- 1a. The escalation referral screen (FR6) — HIGH risk only; CRISIS never reaches here. -->
+      <SafetyReferralScreen
+        v-if="showReferral"
+        :session-id="sessionId"
+        :escalation-recorded="result.escalationRecorded"
+      />
 
       <!-- 2. Numeric scores with their possible range, for both instruments. -->
       <section class="flex flex-col gap-3">
