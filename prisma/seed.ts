@@ -6,39 +6,31 @@
 // (prisma/resource-content.ts parses and validates the front matter) — content/resources/ is
 // the authored source of truth, Postgres is what the app actually reads from at request time.
 
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
+import argon2 from 'argon2'
 import { PrismaClient } from '@prisma/client'
 import { loadResourceContent } from './resource-content'
 
 const prisma = new PrismaClient()
 
-// Placeholder-strength password hashing for seed data only. server/utils/crypto.ts (rule R5)
-// will implement real argon2id hashing for the auth flow (prompt 4); switch this over to that
-// helper once it exists so there is exactly one password-hashing implementation in the repo.
-function hashPasswordForSeed(password: string): string {
-  const salt = randomBytes(16)
-  const derived = scryptSync(password, salt, 64)
-  return `scrypt:${salt.toString('hex')}:${derived.toString('hex')}`
-}
-
-// Exported so a future auth implementation's tests can confirm this seed format verifies
-// correctly before it is replaced — not used by the seed run itself.
-export function verifySeedPassword(password: string, stored: string): boolean {
-  const [scheme, saltHex, hashHex] = stored.split(':')
-  if (scheme !== 'scrypt' || !saltHex || !hashHex) return false
-  const salt = Buffer.from(saltHex, 'hex')
-  const expected = Buffer.from(hashHex, 'hex')
-  const actual = scryptSync(password, salt, expected.length)
-  return actual.length === expected.length && timingSafeEqual(actual, expected)
+// Real argon2id hashing, same call server/utils/auth.ts's hashPassword() makes — not imported
+// from there directly, since that module also references Nitro-only globals (prisma,
+// unauthorizedError, H3Event cookie helpers) that this plain tsx script's own tsconfig
+// (tsconfig.scripts.json) doesn't have type declarations for.
+async function hashPasswordForSeed(password: string): Promise<string> {
+  return argon2.hash(password, { type: argon2.argon2id })
 }
 
 async function main() {
+  // update refreshes passwordHash too, not just an empty {} — otherwise a re-seed after
+  // changing the hashing scheme (as happened moving off the old scrypt placeholder) would
+  // silently leave an already-existing row's hash on the old scheme forever.
+  const adminPasswordHash = await hashPasswordForSeed('change-me-before-any-real-use')
   const clinician = await prisma.clinician.upsert({
     where: { email: 'admin@mira.local' },
-    update: {},
+    update: { passwordHash: adminPasswordHash },
     create: {
       email: 'admin@mira.local',
-      passwordHash: hashPasswordForSeed('change-me-before-any-real-use'),
+      passwordHash: adminPasswordHash,
       fullName: 'Mira Admin',
       role: 'ADMIN',
       isActive: true

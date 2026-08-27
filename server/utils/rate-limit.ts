@@ -66,3 +66,9 @@ export class InMemoryRateLimiter implements RateLimiter {
 // force / enumeration: 10 attempts per 15 minutes per hashed IP. A single process-wide
 // instance so the limit applies across requests, not per-request.
 export const authRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 15 * 60 * 1000)
+
+// [FR7] A separate instance, not a shared budget with authRateLimiter — the clinician realm is
+// deliberately isolated from the person-being-screened realm end to end (see
+// server/utils/clinician-auth.ts), and sharing a rate-limit bucket would be one more place the
+// two could bleed into each other.
+export const clinicianAuthRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 15 * 60 * 1000)
