@@ -25,8 +25,9 @@ const bodySchema = z
 export default defineEventHandler(async (event) => {
   const admin = requireAdmin(event)
 
-  const id = getRouterParam(event, 'id')
-  if (!id) badRequestError('A resource id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
+  if (!parsedParam.success) badRequestError('A valid resource id is required.')
+  const id = parsedParam.data
 
   const parsed = bodySchema.safeParse(await readBody(event))
   if (!parsed.success) badRequestError('A valid resource update is required.')

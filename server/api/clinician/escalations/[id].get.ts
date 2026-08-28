@@ -12,8 +12,13 @@ import { decryptField } from '../../../utils/crypto'
 export default defineEventHandler(async (event) => {
   requireClinician(event)
 
-  const id = getRouterParam(event, 'id')
-  if (!id) badRequestError('An escalation id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
+  if (!parsedParam.success) badRequestError('A valid escalation id is required.')
+  const id = parsedParam.data
+
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
 
   const escalation = await prisma.escalation.findUnique({
     where: { id },

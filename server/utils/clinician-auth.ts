@@ -17,6 +17,10 @@ export const CLINICIAN_SESSION_COOKIE_NAME = 'mira_clinician_session'
 export const CLINICIAN_SESSION_TTL_MS = 12 * 60 * 60 * 1000 // 12 hours
 export const CLINICIAN_SESSION_REFRESH_THRESHOLD_MS = 15 * 60 * 1000 // 15 minutes
 
+// [NFR1] The clinician-realm counterpart to SESSION_ABSOLUTE_TTL_MS in auth.ts — shorter,
+// matching this realm's shorter sliding TTL above and its higher blast radius.
+export const CLINICIAN_SESSION_ABSOLUTE_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 days
+
 export function setClinicianSessionCookie(event: H3Event, token: string, expiresAt: Date): void {
   setCookie(event, CLINICIAN_SESSION_COOKIE_NAME, token, {
     httpOnly: true,

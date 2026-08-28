@@ -9,8 +9,13 @@
 import { marked } from 'marked'
 
 export default defineEventHandler(async (event) => {
-  const slug = getRouterParam(event, 'slug')
-  if (!slug) badRequestError('A resource slug is required.')
+  const parsedParam = slugParamSchema.safeParse(getRouterParam(event, 'slug'))
+  if (!parsedParam.success) badRequestError('A valid resource slug is required.')
+  const slug = parsedParam.data
+
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
 
   const resource = await prisma.resource.findUnique({ where: { slug } })
   if (!resource || !resource.isActive) notFoundError('Resource not found.')

@@ -17,6 +17,12 @@ export const SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 days
 // last refresh, so an active user doesn't cause a write on every single request.
 export const SESSION_REFRESH_THRESHOLD_MS = 60 * 60 * 1000 // 1 hour
 
+// [NFR1] A hard ceiling on top of the sliding SESSION_TTL_MS window above: even a session used
+// every day, forever, is still forced to re-authenticate after this long since it was first
+// created (server/middleware/auth.ts checks Session.createdAt, not just expiresAt) — an idle
+// timeout alone never expires a session an attacker who stole the cookie keeps actively using.
+export const SESSION_ABSOLUTE_TTL_MS = 90 * 24 * 60 * 60 * 1000 // 90 days
+
 export async function hashPassword(password: string): Promise<string> {
   return argon2.hash(password, { type: argon2.argon2id })
 }
@@ -27,6 +33,20 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   } catch {
     return false
   }
+}
+
+// [NFR1] A precomputed, valid-format argon2id hash with no corresponding real password, computed
+// once and cached. Login routes verify against this when no account matches the given email, so
+// that path pays the same argon2 computation cost as a real "wrong password" attempt — without
+// it, an unknown-email attempt returns near-instantly while a known-email one takes the ~100ms+
+// argon2.verify does, a timing side channel that would let an attacker enumerate registered
+// emails by response time alone even though both paths already return an identical error and
+// status code.
+let dummyPasswordHash: Promise<string> | undefined
+
+export function getDummyPasswordHash(): Promise<string> {
+  dummyPasswordHash ??= hashPassword('timing-safety-placeholder-password-never-used-for-login')
+  return dummyPasswordHash
 }
 
 export class MissingAuthSecretError extends Error {
@@ -92,6 +112,20 @@ export async function issueSession(event: H3Event, userId: string): Promise<void
   })
 
   setSessionCookie(event, token, expiresAt)
+}
+
+// [NFR1] Session-fixation hardening: issues a brand-new session (new token, new row) and
+// invalidates the one the caller arrived with, in one call. Used on a privilege change — right
+// now that's exactly one event, claim-account.post.ts's ANONYMOUS -> REGISTERED upgrade — so an
+// attacker who fixed a victim's pre-registration session id gains nothing from the upgrade: the
+// id that was live before it is dead immediately after. The old row is deleted, not just
+// expired, so it can't be replayed even if the cookie leaked before the upgrade happened.
+export async function rotateSession(event: H3Event, userId: string): Promise<void> {
+  const previousSessionId = event.context.session?.id
+  await issueSession(event, userId)
+  if (previousSessionId) {
+    await prisma.session.delete({ where: { id: previousSessionId } }).catch(() => {})
+  }
 }
 
 // True if error is a Prisma unique-constraint violation (P2002) on the given column. Used

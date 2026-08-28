@@ -55,12 +55,20 @@ export default defineEventHandler(async (event) => {
   const start = Date.now()
   const user = requireUser(event)
 
-  const sessionId = getRouterParam(event, 'id')
-  if (!sessionId) badRequestError('A session id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
+  if (!parsedParam.success) badRequestError('A valid session id is required.')
+  const sessionId = parsedParam.data
+
+  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
+  const rateLimit = screeningSubmissionRateLimiter.consume(hashIdentifier(ip))
+  if (!rateLimit.allowed) tooManyRequestsError()
 
   const body = (await readBody(event).catch(() => undefined)) ?? {}
   const parsedBody = bodySchema.safeParse(body)
   if (!parsedBody.success) badRequestError('This endpoint does not accept a request body.')
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
 
   const session = await prisma.screeningSession.findUnique({
     where: { id: sessionId },

@@ -3,6 +3,14 @@
 // so the client can safely call this on every app load without creating throwaway users.
 
 export default defineEventHandler(async (event) => {
+  const body = (await readBody(event).catch(() => undefined)) ?? {}
+  if (!emptyBodySchema.safeParse(body).success) {
+    badRequestError('This endpoint does not accept a request body.')
+  }
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   if (event.context.user) {
     return { pseudonym: event.context.user.pseudonym, authMode: event.context.user.authMode }
   }

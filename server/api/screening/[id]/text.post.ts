@@ -25,8 +25,9 @@ export default defineEventHandler(async (event) => {
   const start = Date.now()
   const user = requireUser(event)
 
-  const sessionId = getRouterParam(event, 'id')
-  if (!sessionId) badRequestError('A session id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
+  if (!parsedParam.success) badRequestError('A valid session id is required.')
+  const sessionId = parsedParam.data
 
   const session = await prisma.screeningSession.findUnique({
     where: { id: sessionId },

@@ -1,7 +1,9 @@
 <script setup lang="ts">
-// Minimal, functional sign-in so the landing page's second action isn't a dead link — prompt 8
-// is scoped to the screening flow; a fuller auth UI belongs to a later prompt.
-const { login } = useAuth()
+// [FR1] The missing counterpart to login.vue — server/api/auth/register.post.ts has always
+// supported a cold registration (no prior session required, see that file's own comment
+// distinguishing it from claim-account.post.ts), it just never had a page. Minimal and
+// functional, matching login.vue's own scope and style.
+const { register } = useAuth()
 
 const email = ref('')
 const password = ref('')
@@ -12,10 +14,11 @@ async function handleSubmit() {
   submitting.value = true
   error.value = null
   try {
-    await login(email.value, password.value)
+    await register(email.value, password.value)
     await navigateTo('/')
-  } catch {
-    error.value = 'Incorrect email or password.'
+  } catch (err) {
+    const fetchError = err as { data?: { statusMessage?: string } }
+    error.value = fetchError.data?.statusMessage ?? 'Something went wrong. Please try again.'
   } finally {
     submitting.value = false
   }
@@ -24,7 +27,14 @@ async function handleSubmit() {
 
 <template>
   <main class="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-6 px-6 py-10">
-    <h1 class="text-2xl font-semibold text-slate-900">Sign in</h1>
+    <div>
+      <h1 class="text-2xl font-semibold text-slate-900">Create an account</h1>
+      <p class="mt-2 text-sm text-slate-600">
+        Not required to use Mira — you can always
+        <NuxtLink to="/" class="text-indigo-700 underline">start a private check</NuxtLink>
+        with no account and register later if you want one.
+      </p>
+    </div>
 
     <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
       <div>
@@ -47,9 +57,11 @@ async function handleSubmit() {
           v-model="password"
           type="password"
           required
-          autocomplete="current-password"
+          minlength="8"
+          autocomplete="new-password"
           class="min-h-[44px] w-full rounded-lg border border-slate-300 px-4 py-2 text-base"
         />
+        <p class="mt-1 text-xs text-slate-500">At least 8 characters.</p>
       </div>
 
       <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }}</p>
@@ -59,13 +71,13 @@ async function handleSubmit() {
         class="min-h-[44px] rounded-lg bg-indigo-600 px-6 py-3 text-base font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
         :disabled="submitting"
       >
-        {{ submitting ? 'Signing in…' : 'Sign in' }}
+        {{ submitting ? 'Creating account…' : 'Create account' }}
       </button>
     </form>
 
     <p class="text-center text-sm text-slate-600">
-      Don't have an account?
-      <NuxtLink to="/register" class="text-indigo-700 underline">Create one</NuxtLink>
+      Already have an account?
+      <NuxtLink to="/login" class="text-indigo-700 underline">Sign in</NuxtLink>
     </p>
 
     <NuxtLink to="/" class="text-center text-sm text-indigo-700 underline">Back</NuxtLink>

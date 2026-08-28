@@ -8,15 +8,25 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { GAD7_ITEMS } from '../../server/domain/instruments/gad7'
 import { PHQ9_ITEM_NINE_CODE, PHQ9_ITEMS } from '../../server/domain/instruments/phq9'
-import { extractCookie } from './helpers/cookies'
+import { extractCookie, extractCsrfToken } from './helpers/cookies'
 import { startTestServer, type TestServer } from './helpers/test-server'
 
 let server: TestServer
 let prisma: PrismaClient
+let csrfCookie: string
+let csrfToken: string
+
+function withCsrf(cookie?: string): { cookie: string; 'x-csrf-token': string } {
+  return { cookie: cookie ? `${cookie}; ${csrfCookie}` : csrfCookie, 'x-csrf-token': csrfToken }
+}
 
 beforeAll(async () => {
   server = await startTestServer()
   prisma = new PrismaClient({ datasources: { db: { url: server.databaseUrl } } })
+
+  const seed = await fetch(`${server.baseUrl}/api/auth/session`)
+  csrfCookie = extractCookie(seed)!
+  csrfToken = extractCsrfToken(seed)!
 
   await prisma.resource.createMany({
     data: [
@@ -91,7 +101,10 @@ function allItemsAtZero(): Record<string, number> {
 }
 
 async function startAnonymousSession(): Promise<string> {
-  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, { method: 'POST' })
+  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+    method: 'POST',
+    headers: withCsrf()
+  })
   return extractCookie(response)!
 }
 
@@ -101,7 +114,7 @@ async function completeScreening(
 ): Promise<{ sessionId: string; body: Record<string, unknown> }> {
   const started = await fetch(`${server.baseUrl}/api/screening/start`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
   const { sessionId } = await started.json()
 
@@ -109,14 +122,14 @@ async function completeScreening(
   for (const [itemCode, rawValue] of Object.entries(values)) {
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/answer`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ itemCode, rawValue })
     })
   }
 
   const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
   const body = await response.json()
   return { sessionId, body }
@@ -204,7 +217,7 @@ describe('resource recommendations attach to a completed screening', () => {
 
     const second = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const secondBody = await second.json()
 
