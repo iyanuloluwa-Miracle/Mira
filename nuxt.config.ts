@@ -45,6 +45,11 @@ export default defineNuxtConfig({
     experimental: { tasks: true },
     scheduledTasks: {
       '0 3 * * *': ['retention']
-    }
+    },
+    // [R8] server/error.ts — replaces Nitro's default error handler so every unexpected error
+    // gets a flat, generic client-facing message and a redacted server-side log line, never a
+    // raw stack trace or Prisma error. A plain relative path, not the `~` alias — that resolves
+    // against app/ (Nuxt's own srcDir) in this config context, not server/.
+    errorHandler: './server/error.ts'
   }
 })
