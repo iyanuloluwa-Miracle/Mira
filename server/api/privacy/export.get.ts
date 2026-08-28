@@ -7,6 +7,10 @@ import { exportUserData } from '../../utils/dsar'
 export default defineEventHandler(async (event) => {
   const user = requireUser(event)
 
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   const data = await exportUserData(user.id)
 
   await writeAuditLog({

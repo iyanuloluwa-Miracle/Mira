@@ -2,6 +2,10 @@
 // this is how the client checks auth state on load, including for anonymous sessions.
 
 export default defineEventHandler((event) => {
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   const user = event.context.user
 
   if (!user) {

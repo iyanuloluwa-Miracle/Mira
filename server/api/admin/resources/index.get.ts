@@ -5,6 +5,10 @@
 export default defineEventHandler(async (event) => {
   requireAdmin(event)
 
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   const resources = await prisma.resource.findMany({
     orderBy: { title: 'asc' },
     select: {

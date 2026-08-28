@@ -4,7 +4,11 @@
 // no body (that's the detail route's job) and no sourceAttribution (not relevant until someone
 // is actually reading the article).
 
-export default defineEventHandler(async () => {
+export default defineEventHandler(async (event) => {
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   const resources = await prisma.resource.findMany({
     where: { isActive: true },
     select: {

@@ -72,3 +72,24 @@ export const authRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 15 * 60 
 // server/utils/clinician-auth.ts), and sharing a rate-limit bucket would be one more place the
 // two could bleed into each other.
 export const clinicianAuthRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 15 * 60 * 1000)
+
+// [FR2][NFR1] Moderate: covers starting and completing a screening session — the two heaviest
+// and most consequential points in the flow (complete.post.ts runs scoring, triage, the
+// classifier-adjustment path, and an interactive transaction). Deliberately not as tight as
+// authRateLimiter: unlike a login attempt, this is one hashed IP potentially shared by many
+// legitimate concurrent people (a shared campus or family connection is a realistic part of this
+// app's low-resource-device audience, NFR2), and a real person starting or completing more than
+// a couple of screenings in five minutes is already implausible — 100 stays comfortably below
+// anything a scripted flood wouldn't hit almost immediately, while never being the thing a real
+// person notices.
+export const screeningSubmissionRateLimiter: RateLimiter = new InMemoryRateLimiter(
+  100,
+  5 * 60 * 1000
+)
+
+// [R6][NFR1] Strict: every call reaches the bounded conversational layer, which means a real
+// network call to the LLM provider on the common path — the most expensive request in this
+// app by a wide margin, and the one most worth bounding tightly regardless of session-level
+// token budgets (server/services/conversation), which only cap a single session, not request
+// rate across sessions.
+export const conversationRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 60 * 1000)

@@ -23,8 +23,9 @@ const bodySchema = z
 export default defineEventHandler(async (event) => {
   const clinician = requireClinician(event)
 
-  const id = getRouterParam(event, 'id')
-  if (!id) badRequestError('An escalation id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
+  if (!parsedParam.success) badRequestError('A valid escalation id is required.')
+  const id = parsedParam.data
 
   const parsed = bodySchema.safeParse(await readBody(event))
   if (!parsed.success) badRequestError('A valid status and/or notes field is required.')

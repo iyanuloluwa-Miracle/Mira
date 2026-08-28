@@ -11,8 +11,14 @@ import { createNotificationService } from '../../../services/notification'
 export default defineEventHandler(async (event) => {
   const user = requireUser(event)
 
-  const sessionId = getRouterParam(event, 'id')
-  if (!sessionId) badRequestError('A session id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
+  if (!parsedParam.success) badRequestError('A valid session id is required.')
+  const sessionId = parsedParam.data
+
+  const body = (await readBody(event).catch(() => undefined)) ?? {}
+  if (!emptyBodySchema.safeParse(body).success) {
+    badRequestError('This endpoint does not accept a request body.')
+  }
 
   const session = await prisma.screeningSession.findUnique({
     where: { id: sessionId },

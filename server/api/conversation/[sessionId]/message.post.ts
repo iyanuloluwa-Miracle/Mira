@@ -37,8 +37,15 @@ export default defineEventHandler(async (event) => {
   const start = Date.now()
   const user = requireUser(event)
 
-  const sessionId = getRouterParam(event, 'sessionId')
-  if (!sessionId) badRequestError('A session id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'sessionId'))
+  if (!parsedParam.success) badRequestError('A valid session id is required.')
+  const sessionId = parsedParam.data
+
+  // [R6][NFR1] Strict rate limit — every call that gets this far reaches the LLM provider on
+  // the common path, the most expensive request this app makes by a wide margin.
+  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
+  const rateLimit = conversationRateLimiter.consume(hashIdentifier(ip))
+  if (!rateLimit.allowed) tooManyRequestsError()
 
   const session = await prisma.screeningSession.findUnique({
     where: { id: sessionId },

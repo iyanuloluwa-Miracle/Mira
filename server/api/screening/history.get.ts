@@ -6,6 +6,10 @@ export default defineEventHandler(async (event) => {
   const start = Date.now()
   const user = requireUser(event)
 
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   const sessions = await prisma.screeningSession.findMany({
     where: { userId: user.id },
     include: { triageResult: true },

@@ -3,6 +3,10 @@
 // client-side middleware checks auth state.
 
 export default defineEventHandler((event) => {
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   const clinician = event.context.clinician
 
   if (!clinician) {

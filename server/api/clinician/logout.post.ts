@@ -2,6 +2,11 @@
 // server/api/auth/logout.post.ts. Idempotent, same as that route.
 
 export default defineEventHandler(async (event) => {
+  const body = (await readBody(event).catch(() => undefined)) ?? {}
+  if (!emptyBodySchema.safeParse(body).success) {
+    badRequestError('This endpoint does not accept a request body.')
+  }
+
   if (event.context.clinicianSession) {
     await prisma.clinicianSession
       .delete({ where: { id: event.context.clinicianSession.id } })

@@ -6,6 +6,10 @@
 export default defineEventHandler(async (event) => {
   const user = requireUser(event)
 
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
+
   const [sessionCount, freeTextCount, conversationTurnCount, consentCount, escalationCount] =
     await Promise.all([
       prisma.screeningSession.count({ where: { userId: user.id } }),
