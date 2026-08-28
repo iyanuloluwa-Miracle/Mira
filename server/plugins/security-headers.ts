@@ -24,7 +24,27 @@ import { randomBytes } from 'node:crypto'
 
 const CSP_NONCE_BYTES = 16
 
-function buildCsp(nonce: string): string {
+// [NFR2] `npm run dev` needs a materially looser policy than production, for reasons that have
+// nothing to do with this app's own code: Vite's CSS hot-reload injects/replaces <style> tags at
+// runtime (production has no equivalent — CSS is fully extracted to static files there, see this
+// file's own header comment), and vite-plugin-checker's error overlay and Nuxt DevTools' own UI
+// (enabled via devtools: true in nuxt.config.ts) both need real inline execution and load Google
+// Fonts for their own interface, unrelated to anything this app renders. None of that ships to
+// production, and a strict CSP has no security value against the developer's own machine — so
+// dev mode gets a permissive policy, production gets the real one below.
+function buildCsp(nonce: string, isProduction: boolean): string {
+  if (!isProduction) {
+    return [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+      "font-src 'self' https://fonts.gstatic.com",
+      "img-src 'self' data:",
+      "connect-src 'self' ws: wss:",
+      "object-src 'none'"
+    ].join('; ')
+  }
+
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}'`,
@@ -69,7 +89,11 @@ export default defineNitroPlugin((nitroApp) => {
 
   nitroApp.hooks.hook('beforeResponse', (event) => {
     const nonce = event.context.nonce ?? randomBytes(CSP_NONCE_BYTES).toString('base64')
-    setResponseHeader(event, 'content-security-policy', buildCsp(nonce))
+    setResponseHeader(
+      event,
+      'content-security-policy',
+      buildCsp(nonce, process.env.NODE_ENV === 'production')
+    )
     // Two years, subdomains included — this app has no subdomains that need to stay on plain
     // HTTP, and a shorter max-age just gives a network attacker a bigger window to strip HTTPS
     // on a return visit after the header expires. Harmless to send over a plain-HTTP dev
