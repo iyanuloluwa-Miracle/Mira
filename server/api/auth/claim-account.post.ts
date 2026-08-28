@@ -49,6 +49,11 @@ export default defineEventHandler(async (event) => {
       }
     })
 
+    // [NFR1] Privilege change (ANONYMOUS -> REGISTERED): rotate the session so whatever id
+    // existed before this upgrade is dead immediately after it (server/utils/auth.ts's own
+    // comment on rotateSession has the full reasoning).
+    await rotateSession(event, user.id)
+
     return { pseudonym: user.pseudonym, authMode: user.authMode }
   } catch (error) {
     // Defensive fallback for the check-then-update race the findUnique above can't close on

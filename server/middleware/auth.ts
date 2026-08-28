@@ -24,7 +24,13 @@ export default defineEventHandler(async (event) => {
 
   const now = new Date()
 
-  if (!session || session.expiresAt < now || session.user.deletedAt) {
+  if (
+    !session ||
+    session.expiresAt < now ||
+    session.user.deletedAt ||
+    now.getTime() - session.createdAt.getTime() > SESSION_ABSOLUTE_TTL_MS
+  ) {
+    if (session) await prisma.session.delete({ where: { id: session.id } }).catch(() => {})
     clearSessionCookie(event)
     return
   }

@@ -30,8 +30,12 @@ export default defineEventHandler(async (event) => {
   if (
     !clinicianSession ||
     clinicianSession.expiresAt < now ||
-    !clinicianSession.clinician.isActive
+    !clinicianSession.clinician.isActive ||
+    now.getTime() - clinicianSession.createdAt.getTime() > CLINICIAN_SESSION_ABSOLUTE_TTL_MS
   ) {
+    if (clinicianSession) {
+      await prisma.clinicianSession.delete({ where: { id: clinicianSession.id } }).catch(() => {})
+    }
     clearClinicianSessionCookie(event)
     return
   }

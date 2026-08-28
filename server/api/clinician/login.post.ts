@@ -26,10 +26,15 @@ export default defineEventHandler(async (event) => {
   // directly rather than by a hash the way User login does.
   const clinician = await prisma.clinician.findUnique({ where: { email } })
 
-  if (!clinician || !clinician.isActive) unauthorizedError()
+  // [NFR1] Always runs, even for an email with no matching clinician account — see
+  // getDummyPasswordHash's own comment for why (closes a timing-based account-enumeration side
+  // channel).
+  const valid = await verifyPassword(
+    password,
+    clinician?.passwordHash ?? (await getDummyPasswordHash())
+  )
 
-  const valid = await verifyPassword(password, clinician.passwordHash)
-  if (!valid) unauthorizedError()
+  if (!clinician || !clinician.isActive || !valid) unauthorizedError()
 
   await issueClinicianSession(event, clinician.id)
 
