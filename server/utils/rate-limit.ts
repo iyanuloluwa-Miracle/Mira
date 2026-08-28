@@ -93,3 +93,10 @@ export const screeningSubmissionRateLimiter: RateLimiter = new InMemoryRateLimit
 // token budgets (server/services/conversation), which only cap a single session, not request
 // rate across sessions.
 export const conversationRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 60 * 1000)
+
+// [Chapter Four, Section 3.8.3] Generous, not strict: a real usability-test participant can
+// legitimately produce a screen transition or a back-navigation on nearly every interaction, and
+// this must never be the reason a real observation goes missing from the evidence it's collecting.
+// Still bounded, so a stray loop (a broken redirect, for instance) can't grow the Metric-adjacent
+// evaluation_events table unbounded.
+export const evaluationEventRateLimiter: RateLimiter = new InMemoryRateLimiter(300, 5 * 60 * 1000)

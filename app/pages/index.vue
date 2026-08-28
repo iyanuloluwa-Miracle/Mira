@@ -15,6 +15,7 @@ async function handleStart() {
   } catch {
     error.value = "We couldn't start a session. Please try again."
     starting.value = false
+    useEvaluation().logError()
   }
 }
 </script>

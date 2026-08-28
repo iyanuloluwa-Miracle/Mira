@@ -51,6 +51,7 @@ const CONSENT_PURPOSES = ['SCREENING', 'RESEARCH_LOGGING', 'HUMAN_REVIEW'] as co
 type ConsentPurpose = (typeof CONSENT_PURPOSES)[number]
 
 const { session, ensureSession } = useAuth()
+const { logError } = useEvaluation()
 
 const loading = ref(true)
 const loadError = ref<string | null>(null)
@@ -82,6 +83,7 @@ async function loadDashboard(): Promise<void> {
     })
   } catch {
     loadError.value = DASHBOARD_LOAD_ERROR_MESSAGE
+    logError()
   } finally {
     loading.value = false
   }
@@ -101,6 +103,7 @@ async function toggleConsent(purpose: ConsentPurpose): Promise<void> {
     consentState.value[purpose] = next
   } catch {
     consentError.value = CONSENT_TOGGLE_ERROR_MESSAGE
+    logError()
   } finally {
     consentSaving.value = null
   }
@@ -122,6 +125,7 @@ async function handleExport(): Promise<void> {
     URL.revokeObjectURL(url)
   } catch {
     exportError.value = DASHBOARD_EXPORT_ERROR_MESSAGE
+    logError()
   } finally {
     exporting.value = false
   }
@@ -151,6 +155,7 @@ async function handleDelete(): Promise<void> {
     deleted.value = true
   } catch {
     deleteError.value = DASHBOARD_DELETE_ERROR_MESSAGE
+    logError()
   } finally {
     deleting.value = false
     confirmingDelete.value = false

@@ -16,6 +16,7 @@ async function handleSubmit() {
     await navigateTo('/')
   } catch {
     error.value = 'Incorrect email or password.'
+    useEvaluation().logError()
   } finally {
     submitting.value = false
   }
