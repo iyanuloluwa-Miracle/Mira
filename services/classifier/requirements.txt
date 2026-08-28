@@ -2,7 +2,7 @@
 # pinned ahead of that swap so the service's dependency footprint doesn't change when it lands.
 # Training code and the model artifact itself live in the separate research repo; only
 # inference-time dependencies belong here.
-torch>=2.4,<3.0
+torch>=2.13.0,<3.0
 transformers>=4.44,<5.0
 
 fastapi>=0.115,<1.0
