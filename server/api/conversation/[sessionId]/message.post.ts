@@ -88,6 +88,23 @@ export default defineEventHandler(async (event) => {
   const responseText = outcomeUserFacingText(outcome)
   await persistTurn(session.id, turnNumber, outcome, message, responseText, user.id)
 
+  // [NFR3] server = this whole endpoint's handling time (pre-filter, the LLM call when one
+  // happens, post-filter, encryption, the ConversationTurn write). e2e = the LLM API call's own
+  // round trip specifically, only recorded when a call actually happened — a pre-filtered or
+  // session-limited turn never reaches the provider at all, so there is nothing to measure.
+  await recordMetric({
+    name: 'llm_turn_server_ms',
+    valueMs: Date.now() - start,
+    sessionId: session.id
+  })
+  if (outcome.kind === 'ok' || outcome.kind === 'post-filter') {
+    await recordMetric({
+      name: 'llm_turn_e2e_ms',
+      valueMs: outcome.latencyMs,
+      sessionId: session.id
+    })
+  }
+
   if (outcome.kind === 'pre-filter') {
     const crisis = getCrisisResponse()
     return {
