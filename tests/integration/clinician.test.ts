@@ -7,24 +7,34 @@
 // Clinician/admin login happens once each, in beforeAll, and every test reuses that cookie —
 // clinicianAuthRateLimiter (server/utils/rate-limit.ts) allows 10 attempts per 15 minutes per
 // hashed IP, and this file has far more than 10 assertions that need a clinician session.
+//
+// Every mutating request also needs a CSRF header now (server/middleware/csrf.ts) — csrfCookie/
+// csrfToken are seeded once in beforeAll (the CSRF cookie is independent of which session, user
+// or clinician, is otherwise active) and reused everywhere via withCsrf().
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import argon2 from 'argon2'
 import { PrismaClient } from '@prisma/client'
 import { GAD7_ITEMS } from '../../server/domain/instruments/gad7'
 import { PHQ9_ITEM_NINE_CODE, PHQ9_ITEMS } from '../../server/domain/instruments/phq9'
-import { extractCookie } from './helpers/cookies'
+import { extractCookie, extractCsrfToken } from './helpers/cookies'
 import { startTestServer, type TestServer } from './helpers/test-server'
 
 let server: TestServer
 let prisma: PrismaClient
 let clinicianCookie: string
 let adminCookie: string
+let csrfCookie: string
+let csrfToken: string
+
+function withCsrf(cookie?: string): { cookie: string; 'x-csrf-token': string } {
+  return { cookie: cookie ? `${cookie}; ${csrfCookie}` : csrfCookie, 'x-csrf-token': csrfToken }
+}
 
 async function login(email: string): Promise<string> {
   const response = await fetch(`${server.baseUrl}/api/clinician/login`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { ...withCsrf(), 'content-type': 'application/json' },
     body: JSON.stringify({ email, password: 'a-strong-clinician-password' })
   })
   expect(response.status).toBe(200)
@@ -34,6 +44,10 @@ async function login(email: string): Promise<string> {
 beforeAll(async () => {
   server = await startTestServer()
   prisma = new PrismaClient({ datasources: { db: { url: server.databaseUrl } } })
+
+  const seed = await fetch(`${server.baseUrl}/api/auth/session`)
+  csrfCookie = extractCookie(seed)!
+  csrfToken = extractCsrfToken(seed)!
 
   const passwordHash = await argon2.hash('a-strong-clinician-password', { type: argon2.argon2id })
   await prisma.clinician.createMany({
@@ -65,7 +79,10 @@ afterAll(async () => {
 })
 
 async function userCookie(): Promise<string> {
-  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, { method: 'POST' })
+  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+    method: 'POST',
+    headers: withCsrf()
+  })
   return extractCookie(response)!
 }
 
@@ -83,7 +100,7 @@ async function answerAll(cookie: string, sessionId: string, values: Record<strin
   for (const [itemCode, rawValue] of Object.entries(values)) {
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/answer`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ itemCode, rawValue })
     })
   }
@@ -95,7 +112,7 @@ async function complete(
 ): Promise<{ sessionId: string; body: Record<string, unknown> }> {
   const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
   const body = await response.json()
   return { sessionId, body }
@@ -106,7 +123,7 @@ async function completeHighRiskScreening(
 ): Promise<{ sessionId: string; body: Record<string, unknown> }> {
   const started = await fetch(`${server.baseUrl}/api/screening/start`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
   const { sessionId } = await started.json()
   await answerAll(cookie, sessionId, highRiskAnswers())
@@ -122,14 +139,14 @@ async function completeHighRiskScreeningWithFreeText(
 ): Promise<{ sessionId: string; body: Record<string, unknown> }> {
   const started = await fetch(`${server.baseUrl}/api/screening/start`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
   const { sessionId } = await started.json()
   await answerAll(cookie, sessionId, highRiskAnswers())
 
   const textResponse = await fetch(`${server.baseUrl}/api/screening/${sessionId}/text`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ text })
   })
   expect(textResponse.status).toBe(200)
@@ -140,7 +157,7 @@ async function completeHighRiskScreeningWithFreeText(
 async function grantHumanReviewConsent(cookie: string): Promise<void> {
   const response = await fetch(`${server.baseUrl}/api/privacy/consent`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ purpose: 'HUMAN_REVIEW', granted: true, consentVersion: '1' })
   })
   expect(response.status).toBe(200)
@@ -149,7 +166,7 @@ async function grantHumanReviewConsent(cookie: string): Promise<void> {
 async function withdrawHumanReviewConsent(cookie: string): Promise<void> {
   const response = await fetch(`${server.baseUrl}/api/privacy/consent`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ purpose: 'HUMAN_REVIEW', granted: false, consentVersion: '1' })
   })
   expect(response.status).toBe(200)
@@ -167,7 +184,7 @@ describe('role separation', () => {
   it('a clinician session cannot reach a user route', async () => {
     const response = await fetch(`${server.baseUrl}/api/screening/start`, {
       method: 'POST',
-      headers: { cookie: clinicianCookie }
+      headers: withCsrf(clinicianCookie)
     })
     expect(response.status).toBe(401)
   })
@@ -225,14 +242,14 @@ describe('consent-gated escalation record creation (FR6)', () => {
 
     const first = await fetch(`${server.baseUrl}/api/screening/${sessionId}/escalate`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     expect(first.status).toBe(200)
     expect((await first.json()).escalationRecorded).toBe(true)
 
     const second = await fetch(`${server.baseUrl}/api/screening/${sessionId}/escalate`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     expect(second.status).toBe(200)
 
@@ -371,7 +388,7 @@ describe('status transitions write an AuditLog entry every time, with the clinic
 
     const response = await fetch(`${server.baseUrl}/api/clinician/escalations/${escalation.id}`, {
       method: 'PATCH',
-      headers: { cookie: clinicianCookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(clinicianCookie), 'content-type': 'application/json' },
       body: JSON.stringify({ status: 'ACKNOWLEDGED' })
     })
     expect(response.status).toBe(200)
@@ -404,13 +421,13 @@ describe('status transitions write an AuditLog entry every time, with the clinic
 
     await fetch(`${server.baseUrl}/api/clinician/escalations/${escalation.id}`, {
       method: 'PATCH',
-      headers: { cookie: clinicianCookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(clinicianCookie), 'content-type': 'application/json' },
       body: JSON.stringify({ status: 'CONTACTED' })
     })
 
     const backward = await fetch(`${server.baseUrl}/api/clinician/escalations/${escalation.id}`, {
       method: 'PATCH',
-      headers: { cookie: clinicianCookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(clinicianCookie), 'content-type': 'application/json' },
       body: JSON.stringify({ status: 'PENDING' })
     })
     expect(backward.status).toBe(400)
@@ -427,7 +444,7 @@ describe('status transitions write an AuditLog entry every time, with the clinic
 
     const response = await fetch(`${server.baseUrl}/api/clinician/escalations/${escalation.id}`, {
       method: 'PATCH',
-      headers: { cookie: clinicianCookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(clinicianCookie), 'content-type': 'application/json' },
       body: JSON.stringify({ notes: 'Called the person, left a voicemail.' })
     })
     expect(response.status).toBe(200)
@@ -451,7 +468,7 @@ describe('admin resource management (FR7)', () => {
   it('an admin can create a resource, and the action is audited', async () => {
     const response = await fetch(`${server.baseUrl}/api/admin/resources`, {
       method: 'POST',
-      headers: { cookie: adminCookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(adminCookie), 'content-type': 'application/json' },
       body: JSON.stringify({
         title: 'Test Resource',
         slug: 'test-resource-integration',
@@ -476,7 +493,7 @@ describe('admin resource management (FR7)', () => {
   it('a plain clinician cannot create a resource', async () => {
     const response = await fetch(`${server.baseUrl}/api/admin/resources`, {
       method: 'POST',
-      headers: { cookie: clinicianCookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(clinicianCookie), 'content-type': 'application/json' },
       body: JSON.stringify({
         title: 'Should Fail',
         slug: 'should-fail',
@@ -490,5 +507,37 @@ describe('admin resource management (FR7)', () => {
       })
     })
     expect(response.status).toBe(403)
+  })
+})
+
+describe('clinician session absolute timeout (NFR1)', () => {
+  it('rejects a clinician session past CLINICIAN_SESSION_ABSOLUTE_TTL_MS, even within its sliding window', async () => {
+    // A throwaway login distinct from the shared clinicianCookie every other test in this file
+    // depends on — this test backdates the row, which must not affect them.
+    const throwawayCookie = await login('clinician@example.test')
+
+    const stillValid = await fetch(`${server.baseUrl}/api/clinician/session`, {
+      headers: { cookie: throwawayCookie }
+    })
+    expect((await stillValid.json()).authenticated).toBe(true)
+
+    const mostRecentSession = await prisma.clinicianSession.findFirstOrThrow({
+      orderBy: { createdAt: 'desc' }
+    })
+    await prisma.clinicianSession.update({
+      where: { id: mostRecentSession.id },
+      data: { createdAt: new Date(Date.now() - 8 * 24 * 60 * 60 * 1000) }
+    })
+
+    const afterAbsoluteTimeout = await fetch(`${server.baseUrl}/api/clinician/session`, {
+      headers: { cookie: throwawayCookie }
+    })
+    expect(await afterAbsoluteTimeout.json()).toEqual({ authenticated: false })
+
+    // The shared clinicianCookie every other test uses is a different row, untouched.
+    const sharedStillValid = await fetch(`${server.baseUrl}/api/clinician/session`, {
+      headers: { cookie: clinicianCookie }
+    })
+    expect((await sharedStillValid.json()).authenticated).toBe(true)
   })
 })

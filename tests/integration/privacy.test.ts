@@ -2,20 +2,35 @@
 // server and a real (if ephemeral) Postgres. Covers exactly the prompt's acceptance criteria:
 // a direct database query returns zero rows for the user across every table after deletion, and
 // the export contains everything the "what is stored" summary claims exists.
+//
+// Every mutating request needs a CSRF header now (server/middleware/csrf.ts) — csrfCookie/
+// csrfToken are seeded once in beforeAll and reused everywhere via withCsrf(), including the
+// "requires a session" test below (a POST with no session cookie still needs a valid CSRF pair
+// to reach its intended 401, rather than getting a 403 from the CSRF check first).
 
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { GAD7_ITEMS } from '../../server/domain/instruments/gad7'
 import { PHQ9_ITEM_NINE_CODE, PHQ9_ITEMS } from '../../server/domain/instruments/phq9'
-import { extractCookie } from './helpers/cookies'
+import { extractCookie, extractCsrfToken } from './helpers/cookies'
 import { startTestServer, type TestServer } from './helpers/test-server'
 
 let server: TestServer
 let prisma: PrismaClient
+let csrfCookie: string
+let csrfToken: string
+
+function withCsrf(cookie?: string): { cookie: string; 'x-csrf-token': string } {
+  return { cookie: cookie ? `${cookie}; ${csrfCookie}` : csrfCookie, 'x-csrf-token': csrfToken }
+}
 
 beforeAll(async () => {
   server = await startTestServer()
   prisma = new PrismaClient({ datasources: { db: { url: server.databaseUrl } } })
+
+  const seed = await fetch(`${server.baseUrl}/api/auth/session`)
+  csrfCookie = extractCookie(seed)!
+  csrfToken = extractCsrfToken(seed)!
 }, 60_000)
 
 afterAll(async () => {
@@ -24,7 +39,10 @@ afterAll(async () => {
 })
 
 async function startUserSession(): Promise<{ cookie: string; pseudonym: string }> {
-  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, { method: 'POST' })
+  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+    method: 'POST',
+    headers: withCsrf()
+  })
   const cookie = extractCookie(response)!
   const { pseudonym } = await response.json()
   return { cookie, pseudonym }
@@ -41,33 +59,33 @@ function highRiskAnswers(): Record<string, number> {
 async function completeScreeningWithFreeText(cookie: string, text: string): Promise<string> {
   const started = await fetch(`${server.baseUrl}/api/screening/start`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
   const { sessionId } = await started.json()
 
   for (const [itemCode, rawValue] of Object.entries(highRiskAnswers())) {
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/answer`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ itemCode, rawValue })
     })
   }
 
   await fetch(`${server.baseUrl}/api/screening/${sessionId}/text`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ text })
   })
 
   await fetch(`${server.baseUrl}/api/privacy/consent`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ purpose: 'HUMAN_REVIEW', granted: true, consentVersion: '1' })
   })
 
   await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
 
   return sessionId
@@ -145,14 +163,14 @@ describe('withdrawing consent takes effect immediately (NFR1)', () => {
     for (const purpose of ['SCREENING', 'RESEARCH_LOGGING']) {
       const grant = await fetch(`${server.baseUrl}/api/privacy/consent`, {
         method: 'POST',
-        headers: { cookie, 'content-type': 'application/json' },
+        headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
         body: JSON.stringify({ purpose, granted: true, consentVersion: '1' })
       })
       expect((await grant.json()).active).toBe(true)
 
       const withdraw = await fetch(`${server.baseUrl}/api/privacy/consent`, {
         method: 'POST',
-        headers: { cookie, 'content-type': 'application/json' },
+        headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
         body: JSON.stringify({ purpose, granted: false, consentVersion: '1' })
       })
       const withdrawn = await withdraw.json()
@@ -173,7 +191,7 @@ describe('deletion (right to erasure, NFR1) — the acceptance criterion', () =>
 
     const response = await fetch(`${server.baseUrl}/api/privacy/delete-account`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ confirmation: 'not-the-right-pseudonym' })
     })
     expect(response.status).toBe(400)
@@ -194,7 +212,7 @@ describe('deletion (right to erasure, NFR1) — the acceptance criterion', () =>
 
     const response = await fetch(`${server.baseUrl}/api/privacy/delete-account`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ confirmation: pseudonym })
     })
     expect(response.status).toBe(200)
@@ -227,7 +245,7 @@ describe('deletion (right to erasure, NFR1) — the acceptance criterion', () =>
   it('requires a session', async () => {
     const response = await fetch(`${server.baseUrl}/api/privacy/delete-account`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { ...withCsrf(), 'content-type': 'application/json' },
       body: JSON.stringify({ confirmation: 'anything' })
     })
     expect(response.status).toBe(401)

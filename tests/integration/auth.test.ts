@@ -5,25 +5,44 @@
 // owns: that an anonymous session is fully authenticated and usable with no email or password
 // ever supplied (rule R9). The screening API itself doesn't exist until prompt 7 — that prompt
 // adds the end-to-end version of this check once there's an endpoint to call.
+//
+// Every mutating request needs a CSRF header now (server/middleware/csrf.ts) — even the ones
+// this file deliberately sends with no session cookie, expecting a 401: without a valid
+// x-csrf-token the CSRF check (which runs before any route handler, session or not) would
+// reject those with 403 instead, testing the wrong thing. csrfCookie/csrfToken are seeded once
+// in beforeAll and reused everywhere — the CSRF cookie is independent of which user session (if
+// any) is otherwise active, so one pair covers this whole file.
 
 import { randomInt } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { PrismaClient } from '@prisma/client'
-import { extractCookie } from './helpers/cookies'
+import { extractCookie, extractCsrfToken } from './helpers/cookies'
 import { startTestServer, type TestServer } from './helpers/test-server'
 
 let server: TestServer
 let prisma: PrismaClient
+let csrfCookie: string
+let csrfToken: string
 
 beforeAll(async () => {
   server = await startTestServer()
   prisma = new PrismaClient({ datasources: { db: { url: server.databaseUrl } } })
+
+  const seed = await fetch(`${server.baseUrl}/api/auth/session`)
+  csrfCookie = extractCookie(seed)!
+  csrfToken = extractCsrfToken(seed)!
 }, 60_000)
 
 afterAll(async () => {
   await prisma?.$disconnect()
   await server?.stop()
 })
+
+// Every mutating call in this file goes through this — combines a session cookie (if any) with
+// the shared csrf cookie, and attaches the matching header.
+function withCsrf(cookie?: string): { cookie: string; 'x-csrf-token': string } {
+  return { cookie: cookie ? `${cookie}; ${csrfCookie}` : csrfCookie, 'x-csrf-token': csrfToken }
+}
 
 function uniqueEmail(label: string): string {
   return `${label}-${Date.now()}-${Math.random().toString(36).slice(2)}@example.com`
@@ -41,7 +60,8 @@ function uniqueIp(): string {
 describe('anonymous entry path (FR1, rule R9)', () => {
   it('creates a usable session with no email or password', async () => {
     const startResponse = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
-      method: 'POST'
+      method: 'POST',
+      headers: withCsrf()
     })
     expect(startResponse.status).toBe(200)
     const started = await startResponse.json()
@@ -70,13 +90,16 @@ describe('anonymous entry path (FR1, rule R9)', () => {
   })
 
   it('is idempotent: calling anonymous-start again with an existing session returns it unchanged', async () => {
-    const first = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, { method: 'POST' })
+    const first = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+      method: 'POST',
+      headers: withCsrf()
+    })
     const cookie = extractCookie(first)!
     const firstBody = await first.json()
 
     const second = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const secondBody = await second.json()
 
@@ -92,7 +115,7 @@ describe('registered entry path (FR1)', () => {
 
     const registerResponse = await fetch(`${server.baseUrl}/api/auth/register`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email, password })
     })
     expect(registerResponse.status).toBe(200)
@@ -101,7 +124,7 @@ describe('registered entry path (FR1)', () => {
 
     const loginResponse = await fetch(`${server.baseUrl}/api/auth/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email, password })
     })
     expect(loginResponse.status).toBe(200)
@@ -114,18 +137,18 @@ describe('registered entry path (FR1)', () => {
     const email = uniqueEmail('wrongpass')
     await fetch(`${server.baseUrl}/api/auth/register`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email, password: 'the-real-password-123' })
     })
 
     const wrongPasswordResponse = await fetch(`${server.baseUrl}/api/auth/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email, password: 'not-the-right-password' })
     })
     const unknownEmailResponse = await fetch(`${server.baseUrl}/api/auth/login`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email: uniqueEmail('nobody'), password: 'anything-at-all' })
     })
 
@@ -143,14 +166,14 @@ describe('registered entry path (FR1)', () => {
     const email = uniqueEmail('dupe')
     const first = await fetch(`${server.baseUrl}/api/auth/register`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email, password: 'first-password-123' })
     })
     expect(first.status).toBe(200)
 
     const second = await fetch(`${server.baseUrl}/api/auth/register`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email, password: 'second-password-456' })
     })
     expect(second.status).toBe(409)
@@ -160,7 +183,7 @@ describe('registered entry path (FR1)', () => {
     const email = uniqueEmail('plaintext-check')
     await fetch(`${server.baseUrl}/api/auth/register`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': uniqueIp() },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': uniqueIp() },
       body: JSON.stringify({ email, password: 'whatever-password-1' })
     })
 
@@ -181,7 +204,7 @@ describe('registered entry path (FR1)', () => {
     for (let i = 0; i < 11; i++) {
       const response = await fetch(`${server.baseUrl}/api/auth/login`, {
         method: 'POST',
-        headers: { 'content-type': 'application/json', 'x-forwarded-for': ip },
+        headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': ip },
         body: JSON.stringify({ email, password: 'guess-number-' + i })
       })
       lastStatus = response.status
@@ -194,14 +217,15 @@ describe('claiming an anonymous account (FR1, rule R9)', () => {
   it('preserves the pseudonym and prior consent history across the upgrade', async () => {
     const ip = uniqueIp()
     const startResponse = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
-      method: 'POST'
+      method: 'POST',
+      headers: withCsrf()
     })
     const cookie = extractCookie(startResponse)!
     const { pseudonym: anonymousPseudonym } = await startResponse.json()
 
     const consentResponse = await fetch(`${server.baseUrl}/api/privacy/consent`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ purpose: 'SCREENING', granted: true, consentVersion: 'v1' })
     })
     expect(consentResponse.status).toBe(200)
@@ -209,7 +233,7 @@ describe('claiming an anonymous account (FR1, rule R9)', () => {
     const email = uniqueEmail('claim')
     const claimResponse = await fetch(`${server.baseUrl}/api/auth/claim-account`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json', 'x-forwarded-for': ip },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json', 'x-forwarded-for': ip },
       body: JSON.stringify({ email, password: 'claim-account-password-1' })
     })
     expect(claimResponse.status).toBe(200)
@@ -218,9 +242,17 @@ describe('claiming an anonymous account (FR1, rule R9)', () => {
     expect(claimed.pseudonym).toBe(anonymousPseudonym)
     expect(claimed.authMode).toBe('REGISTERED')
 
+    // [NFR1] claim-account rotates the session (server/utils/auth.ts's rotateSession) — the
+    // cookie from *before* the upgrade must no longer authenticate anything afterward.
+    const oldCookieCheck = await fetch(`${server.baseUrl}/api/auth/session`, {
+      headers: { cookie }
+    })
+    expect(await oldCookieCheck.json()).toEqual({ authenticated: false })
+
+    const newCookie = extractCookie(claimResponse)!
     const consentAfterClaim = await fetch(
       `${server.baseUrl}/api/privacy/consent?purpose=SCREENING`,
-      { headers: { cookie } }
+      { headers: { cookie: newCookie } }
     )
     const consentState = await consentAfterClaim.json()
     expect(consentState.active).toBe(true)
@@ -230,7 +262,7 @@ describe('claiming an anonymous account (FR1, rule R9)', () => {
   it('refuses to claim an account with no active session', async () => {
     const response = await fetch(`${server.baseUrl}/api/auth/claim-account`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-for': uniqueIp() },
+      headers: { ...withCsrf(), 'content-type': 'application/json', 'x-forwarded-for': uniqueIp() },
       body: JSON.stringify({ email: uniqueEmail('no-session'), password: 'irrelevant-1' })
     })
     expect(response.status).toBe(401)
@@ -239,7 +271,10 @@ describe('claiming an anonymous account (FR1, rule R9)', () => {
 
 describe('consent recording (NFR1)', () => {
   async function startSession(): Promise<string> {
-    const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, { method: 'POST' })
+    const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+      method: 'POST',
+      headers: withCsrf()
+    })
     return extractCookie(response)!
   }
 
@@ -248,7 +283,7 @@ describe('consent recording (NFR1)', () => {
 
     const response = await fetch(`${server.baseUrl}/api/privacy/consent`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ purpose: 'SCREENING', granted: true, consentVersion: 'v2026-08-21' })
     })
     const body = await response.json()
@@ -274,13 +309,13 @@ describe('consent recording (NFR1)', () => {
 
     await fetch(`${server.baseUrl}/api/privacy/consent`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ purpose: 'RESEARCH_LOGGING', granted: true, consentVersion: 'v1' })
     })
 
     const withdrawResponse = await fetch(`${server.baseUrl}/api/privacy/consent`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ purpose: 'RESEARCH_LOGGING', granted: false, consentVersion: 'v1' })
     })
     const withdrawn = await withdrawResponse.json()
@@ -299,7 +334,7 @@ describe('consent recording (NFR1)', () => {
   it('requires a session to record or read consent', async () => {
     const postResponse = await fetch(`${server.baseUrl}/api/privacy/consent`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { ...withCsrf(), 'content-type': 'application/json' },
       body: JSON.stringify({ purpose: 'SCREENING', granted: true, consentVersion: 'v1' })
     })
     expect(postResponse.status).toBe(401)
@@ -312,13 +347,14 @@ describe('consent recording (NFR1)', () => {
 describe('logout', () => {
   it('invalidates the session so it is no longer authenticated', async () => {
     const startResponse = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
-      method: 'POST'
+      method: 'POST',
+      headers: withCsrf()
     })
     const cookie = extractCookie(startResponse)!
 
     const logoutResponse = await fetch(`${server.baseUrl}/api/auth/logout`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     expect(logoutResponse.status).toBe(200)
 
@@ -329,7 +365,60 @@ describe('logout', () => {
   })
 
   it('is idempotent when called with no session', async () => {
-    const response = await fetch(`${server.baseUrl}/api/auth/logout`, { method: 'POST' })
+    const response = await fetch(`${server.baseUrl}/api/auth/logout`, {
+      method: 'POST',
+      headers: withCsrf()
+    })
     expect(response.status).toBe(200)
+  })
+})
+
+describe('CSRF protection on state-changing requests (NFR1)', () => {
+  it('rejects a mutating request with no CSRF token at all', async () => {
+    const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, { method: 'POST' })
+    expect(response.status).toBe(403)
+  })
+
+  it('rejects a mutating request whose header does not match its own cookie', async () => {
+    const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+      method: 'POST',
+      headers: { cookie: csrfCookie, 'x-csrf-token': 'not-the-real-token' }
+    })
+    expect(response.status).toBe(403)
+  })
+
+  it('never checks CSRF on a safe (GET) request', async () => {
+    const response = await fetch(`${server.baseUrl}/api/auth/session`)
+    expect(response.status).toBe(200)
+  })
+})
+
+describe('session absolute timeout (NFR1)', () => {
+  it('rejects a session past SESSION_ABSOLUTE_TTL_MS even though it is still within its sliding window', async () => {
+    const startResponse = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+      method: 'POST',
+      headers: withCsrf()
+    })
+    const cookie = extractCookie(startResponse)!
+
+    const stillValid = await fetch(`${server.baseUrl}/api/auth/session`, { headers: { cookie } })
+    expect((await stillValid.json()).authenticated).toBe(true)
+
+    // Backdate just this session's own row (the most recently created one, since this test's
+    // own anonymous-start call above is the last thing to have created one) — expiresAt (the
+    // sliding window) is left untouched and far in the future, isolating this test to the
+    // absolute-timeout check specifically, not the ordinary sliding-expiry one.
+    const mostRecentSession = await prisma.session.findFirstOrThrow({
+      orderBy: { createdAt: 'desc' }
+    })
+    await prisma.session.update({
+      where: { id: mostRecentSession.id },
+      data: { createdAt: new Date(Date.now() - 91 * 24 * 60 * 60 * 1000) }
+    })
+
+    const afterAbsoluteTimeout = await fetch(`${server.baseUrl}/api/auth/session`, {
+      headers: { cookie }
+    })
+    expect(await afterAbsoluteTimeout.json()).toEqual({ authenticated: false })
   })
 })
