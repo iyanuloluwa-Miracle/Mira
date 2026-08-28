@@ -71,6 +71,13 @@ useHead({ title: CLINICIAN_QUEUE_TITLE })
         >
           Resources
         </NuxtLink>
+        <NuxtLink
+          v-if="session.role === 'ADMIN'"
+          to="/admin/metrics"
+          class="text-sm text-indigo-700 underline"
+        >
+          Metrics
+        </NuxtLink>
         <button type="button" class="text-sm text-indigo-700 underline" @click="handleLogout">
           {{ CLINICIAN_LOGOUT_LABEL }}
         </button>
