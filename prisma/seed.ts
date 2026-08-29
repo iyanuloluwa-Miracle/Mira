@@ -2,122 +2,35 @@
 // participant records, even for local development.
 //
 // [FR7] Seeds one admin clinician account so the clinician review interface has something to
-// log into locally. [FR5] Seeds ten placeholder psychoeducational resources spanning the risk
-// spectrum so triage recommendation logic (server/domain/resources.ts) has real rows to map
-// against — the body copy here is a placeholder, not reviewed clinical content; prompt 14
-// replaces it with the real, clinician-reviewed article set.
+// log into locally. [FR5] Seeds the psychoeducational resource library from content/resources/
+// (prisma/resource-content.ts parses and validates the front matter) — content/resources/ is
+// the authored source of truth, Postgres is what the app actually reads from at request time.
 
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
-import { PrismaClient, RiskLevel } from '@prisma/client'
+import argon2 from 'argon2'
+import { PrismaClient } from '@prisma/client'
+import { loadResourceContent } from './resource-content'
 
 const prisma = new PrismaClient()
 
-// Placeholder-strength password hashing for seed data only. server/utils/crypto.ts (rule R5)
-// will implement real argon2id hashing for the auth flow (prompt 4); switch this over to that
-// helper once it exists so there is exactly one password-hashing implementation in the repo.
-function hashPasswordForSeed(password: string): string {
-  const salt = randomBytes(16)
-  const derived = scryptSync(password, salt, 64)
-  return `scrypt:${salt.toString('hex')}:${derived.toString('hex')}`
+// Real argon2id hashing, same call server/utils/auth.ts's hashPassword() makes — not imported
+// from there directly, since that module also references Nitro-only globals (prisma,
+// unauthorizedError, H3Event cookie helpers) that this plain tsx script's own tsconfig
+// (tsconfig.scripts.json) doesn't have type declarations for.
+async function hashPasswordForSeed(password: string): Promise<string> {
+  return argon2.hash(password, { type: argon2.argon2id })
 }
-
-// Exported so a future auth implementation's tests can confirm this seed format verifies
-// correctly before it is replaced — not used by the seed run itself.
-export function verifySeedPassword(password: string, stored: string): boolean {
-  const [scheme, saltHex, hashHex] = stored.split(':')
-  if (scheme !== 'scrypt' || !saltHex || !hashHex) return false
-  const salt = Buffer.from(saltHex, 'hex')
-  const expected = Buffer.from(hashHex, 'hex')
-  const actual = scryptSync(password, salt, expected.length)
-  return actual.length === expected.length && timingSafeEqual(actual, expected)
-}
-
-const resources: Array<{
-  title: string
-  slug: string
-  tags: string[]
-  minRisk: RiskLevel
-  maxRisk: RiskLevel
-}> = [
-  {
-    title: 'Understanding Low Mood',
-    slug: 'understanding-low-mood',
-    tags: ['depression', 'psychoeducation'],
-    minRisk: RiskLevel.MINIMAL,
-    maxRisk: RiskLevel.MODERATE
-  },
-  {
-    title: 'Understanding Anxiety',
-    slug: 'understanding-anxiety',
-    tags: ['anxiety', 'psychoeducation'],
-    minRisk: RiskLevel.MINIMAL,
-    maxRisk: RiskLevel.MODERATE
-  },
-  {
-    title: 'Sleep and Mental Health',
-    slug: 'sleep-and-mental-health',
-    tags: ['sleep', 'self-care'],
-    minRisk: RiskLevel.MINIMAL,
-    maxRisk: RiskLevel.MODERATE
-  },
-  {
-    title: 'What Your Screening Score Means',
-    slug: 'what-your-score-means',
-    tags: ['screening', 'explanation'],
-    minRisk: RiskLevel.MINIMAL,
-    maxRisk: RiskLevel.HIGH
-  },
-  {
-    title: 'Talking to Family About Mental Health',
-    slug: 'talking-to-family',
-    tags: ['support', 'communication'],
-    minRisk: RiskLevel.MILD,
-    maxRisk: RiskLevel.HIGH
-  },
-  {
-    title: 'What to Expect From a First Appointment',
-    slug: 'first-appointment',
-    tags: ['help-seeking', 'clinician'],
-    minRisk: RiskLevel.MODERATE,
-    maxRisk: RiskLevel.HIGH
-  },
-  {
-    title: 'Finding Help in Nigeria',
-    slug: 'finding-help-in-nigeria',
-    tags: ['help-seeking', 'resources'],
-    minRisk: RiskLevel.MODERATE,
-    maxRisk: RiskLevel.CRISIS
-  },
-  {
-    title: 'Grounding and Breathing Techniques',
-    slug: 'grounding-and-breathing',
-    tags: ['coping', 'anxiety'],
-    minRisk: RiskLevel.MILD,
-    maxRisk: RiskLevel.HIGH
-  },
-  {
-    title: 'When to Seek Urgent Help',
-    slug: 'when-to-seek-urgent-help',
-    tags: ['crisis', 'safety'],
-    minRisk: RiskLevel.HIGH,
-    maxRisk: RiskLevel.CRISIS
-  },
-  {
-    title: 'Building a Daily Routine',
-    slug: 'building-a-daily-routine',
-    tags: ['self-care', 'depression'],
-    minRisk: RiskLevel.MINIMAL,
-    maxRisk: RiskLevel.MODERATE
-  }
-]
 
 async function main() {
+  // update refreshes passwordHash too, not just an empty {} — otherwise a re-seed after
+  // changing the hashing scheme (as happened moving off the old scrypt placeholder) would
+  // silently leave an already-existing row's hash on the old scheme forever.
+  const adminPasswordHash = await hashPasswordForSeed('change-me-before-any-real-use')
   const clinician = await prisma.clinician.upsert({
     where: { email: 'admin@mira.local' },
-    update: {},
+    update: { passwordHash: adminPasswordHash },
     create: {
       email: 'admin@mira.local',
-      passwordHash: hashPasswordForSeed('change-me-before-any-real-use'),
+      passwordHash: adminPasswordHash,
       fullName: 'Mira Admin',
       role: 'ADMIN',
       isActive: true
@@ -125,23 +38,50 @@ async function main() {
   })
   console.log(`Seeded admin clinician: ${clinician.email}`)
 
+  const resources = loadResourceContent()
+  const unverifiedSlugs: string[] = []
+
   for (const resource of resources) {
     await prisma.resource.upsert({
       where: { slug: resource.slug },
-      update: {},
-      create: {
+      update: {
         title: resource.title,
-        slug: resource.slug,
-        body: `# ${resource.title}\n\nPlaceholder content pending clinical review — see prompt 14 / CONTRIBUTING.md.`,
-        language: 'en',
+        body: resource.body,
+        language: resource.language,
         tags: resource.tags,
         minRisk: resource.minRisk,
         maxRisk: resource.maxRisk,
+        readingTimeMinutes: resource.readingTimeMinutes,
+        sourceAttribution: resource.sourceAttribution,
+        isActive: true
+      },
+      create: {
+        title: resource.title,
+        slug: resource.slug,
+        body: resource.body,
+        language: resource.language,
+        tags: resource.tags,
+        minRisk: resource.minRisk,
+        maxRisk: resource.maxRisk,
+        readingTimeMinutes: resource.readingTimeMinutes,
+        sourceAttribution: resource.sourceAttribution,
         isActive: true
       }
     })
+    if (resource.sourceAttribution.startsWith('TODO_VERIFY')) unverifiedSlugs.push(resource.slug)
   }
   console.log(`Seeded ${resources.length} resources`)
+
+  // [R10] Printed at the exact point content enters the system, mirroring
+  // server/plugins/warn-unverified-resource-sources.ts's server-boot warning — a human running
+  // this command is the right moment to notice a citation is still pending.
+  if (unverifiedSlugs.length > 0) {
+    console.warn(
+      `${unverifiedSlugs.length} resource(s) still have a TODO_VERIFY sourceAttribution — do ` +
+        `not treat their content as citing a real source until it has been personally verified ` +
+        `(rule R10): ${unverifiedSlugs.join(', ')}`
+    )
+  }
 }
 
 main()

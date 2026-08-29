@@ -22,10 +22,11 @@ export default defineEventHandler(async (event) => {
 
   const user = await prisma.user.findUnique({ where: { emailHash: hashIdentifier(email) } })
 
-  if (!user || !user.passwordHash || user.deletedAt) unauthorizedError()
+  // [NFR1] Always runs, even for an email with no matching account — see getDummyPasswordHash's
+  // own comment for why (closes a timing-based account-enumeration side channel).
+  const valid = await verifyPassword(password, user?.passwordHash ?? (await getDummyPasswordHash()))
 
-  const valid = await verifyPassword(password, user.passwordHash)
-  if (!valid) unauthorizedError()
+  if (!user || !user.passwordHash || user.deletedAt || !valid) unauthorizedError()
 
   await issueSession(event, user.id)
 

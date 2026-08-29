@@ -1,20 +1,37 @@
 // Integration coverage for prompt 7 (FR2, FR4, FR6, NFR3): the screening session API, against
 // a real built server and a real (if ephemeral) Postgres — see
 // tests/integration/helpers/test-server.ts for why.
+//
+// Every mutating request needs a CSRF header now (server/middleware/csrf.ts) — csrfCookie/
+// csrfToken are seeded once in beforeAll and reused everywhere via withCsrf(). The check itself
+// is pure request self-consistency (does this request's own cookie match its own header, see
+// server/utils/csrf.ts) with no per-server secret involved, so the same pair is reused for the
+// separate degraded-classifier server spun up later in this file too — no second seed needed.
 
+import { randomInt } from 'node:crypto'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { PrismaClient } from '@prisma/client'
 import { GAD7_ITEMS } from '../../server/domain/instruments/gad7'
 import { PHQ9_ITEMS } from '../../server/domain/instruments/phq9'
-import { extractCookie } from './helpers/cookies'
+import { extractCookie, extractCsrfToken } from './helpers/cookies'
 import { startTestServer, type TestServer } from './helpers/test-server'
 
 let server: TestServer
 let prisma: PrismaClient
+let csrfCookie: string
+let csrfToken: string
+
+function withCsrf(cookie?: string): { cookie: string; 'x-csrf-token': string } {
+  return { cookie: cookie ? `${cookie}; ${csrfCookie}` : csrfCookie, 'x-csrf-token': csrfToken }
+}
 
 beforeAll(async () => {
   server = await startTestServer()
   prisma = new PrismaClient({ datasources: { db: { url: server.databaseUrl } } })
+
+  const seed = await fetch(`${server.baseUrl}/api/auth/session`)
+  csrfCookie = extractCookie(seed)!
+  csrfToken = extractCsrfToken(seed)!
 }, 60_000)
 
 afterAll(async () => {
@@ -29,14 +46,17 @@ function allItemsAtZero(): Record<string, number> {
 }
 
 async function startAnonymousSession(): Promise<string> {
-  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, { method: 'POST' })
+  const response = await fetch(`${server.baseUrl}/api/auth/anonymous-start`, {
+    method: 'POST',
+    headers: withCsrf()
+  })
   return extractCookie(response)!
 }
 
 async function startScreening(cookie: string): Promise<{ sessionId: string }> {
   const response = await fetch(`${server.baseUrl}/api/screening/start`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
   expect(response.status).toBe(200)
   return response.json()
@@ -50,7 +70,7 @@ async function answerItem(
 ): Promise<Response> {
   return fetch(`${server.baseUrl}/api/screening/${sessionId}/answer`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ itemCode, rawValue })
   })
 }
@@ -69,7 +89,7 @@ async function answerAll(
 async function submitFreeText(cookie: string, sessionId: string, text: string): Promise<Response> {
   return fetch(`${server.baseUrl}/api/screening/${sessionId}/text`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ text })
   })
 }
@@ -77,7 +97,7 @@ async function submitFreeText(cookie: string, sessionId: string, text: string): 
 async function skipFreeText(cookie: string, sessionId: string): Promise<Response> {
   return fetch(`${server.baseUrl}/api/screening/${sessionId}/text`, {
     method: 'POST',
-    headers: { cookie, 'content-type': 'application/json' },
+    headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
     body: JSON.stringify({ skip: true })
   })
 }
@@ -85,12 +105,12 @@ async function skipFreeText(cookie: string, sessionId: string): Promise<Response
 async function completeSession(cookie: string, sessionId: string): Promise<Response> {
   return fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
     method: 'POST',
-    headers: { cookie }
+    headers: withCsrf(cookie)
   })
 }
 
 async function getResult(cookie: string, sessionId: string): Promise<Response> {
-  return fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, { headers: { cookie } })
+  return fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, { headers: withCsrf(cookie) })
 }
 
 describe('POST /api/screening/start', () => {
@@ -98,7 +118,7 @@ describe('POST /api/screening/start', () => {
     const cookie = await startAnonymousSession()
     const response = await fetch(`${server.baseUrl}/api/screening/start`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const body = await response.json()
 
@@ -114,7 +134,10 @@ describe('POST /api/screening/start', () => {
   })
 
   it('requires a session', async () => {
-    const response = await fetch(`${server.baseUrl}/api/screening/start`, { method: 'POST' })
+    const response = await fetch(`${server.baseUrl}/api/screening/start`, {
+      method: 'POST',
+      headers: withCsrf()
+    })
     expect(response.status).toBe(401)
   })
 })
@@ -128,7 +151,7 @@ describe('full happy path', () => {
 
     const completeResponse = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     expect(completeResponse.status).toBe(200)
     const completed = await completeResponse.json()
@@ -142,7 +165,7 @@ describe('full happy path', () => {
     expect(typeof completed.serverTimeMs).toBe('number')
 
     const resultResponse = await fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, {
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const result = await resultResponse.json()
     expect(result.riskLevel).toBe('MINIMAL')
@@ -150,7 +173,7 @@ describe('full happy path', () => {
     expect(result.gad7Total).toBe(0)
 
     const historyResponse = await fetch(`${server.baseUrl}/api/screening/history`, {
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const history = await historyResponse.json()
     const entry = history.sessions.find((s: { sessionId: string }) => s.sessionId === sessionId)
@@ -166,7 +189,7 @@ describe('full happy path', () => {
 
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
     const session = await prisma.screeningSession.findUnique({ where: { id: sessionId } })
@@ -181,11 +204,11 @@ describe('full happy path', () => {
 
     const first = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const second = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
     expect(first.status).toBe(200)
@@ -208,7 +231,7 @@ describe('partial completion is rejected', () => {
 
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     expect(response.status).toBe(400)
 
@@ -222,7 +245,7 @@ describe('partial completion is rejected', () => {
 
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     expect(response.status).toBe(400)
   })
@@ -246,7 +269,7 @@ describe('ownership — cross-user access is forbidden', () => {
     const otherCookie = await startAnonymousSession()
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie: otherCookie }
+      headers: withCsrf(otherCookie)
     })
     expect(response.status).toBe(403)
   })
@@ -257,12 +280,12 @@ describe('ownership — cross-user access is forbidden', () => {
     await answerAll(ownerCookie, sessionId, allItemsAtZero())
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie: ownerCookie }
+      headers: withCsrf(ownerCookie)
     })
 
     const otherCookie = await startAnonymousSession()
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, {
-      headers: { cookie: otherCookie }
+      headers: withCsrf(otherCookie)
     })
     expect(response.status).toBe(403)
   })
@@ -275,7 +298,7 @@ describe('ownership — cross-user access is forbidden', () => {
     await startScreening(otherCookie)
 
     const response = await fetch(`${server.baseUrl}/api/screening/history`, {
-      headers: { cookie: otherCookie }
+      headers: withCsrf(otherCookie)
     })
     const body = await response.json()
     const leaked = body.sessions.find((s: { sessionId: string }) => s.sessionId === ownerSessionId)
@@ -290,12 +313,12 @@ describe('DELETE /api/screening/[id]', () => {
     await answerAll(cookie, sessionId, allItemsAtZero())
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
       method: 'DELETE',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     expect(response.status).toBe(200)
     const body = await response.json()
@@ -315,14 +338,14 @@ describe('DELETE /api/screening/[id]', () => {
     await answerAll(cookie, sessionId, { ...allItemsAtZero(), PHQ9_Q9: 1 })
     const completeResponse = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const completed = await completeResponse.json()
     expect(completed.riskLevel).toBe('CRISIS')
 
     await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
       method: 'DELETE',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
     const escalations = await prisma.escalation.findMany({
@@ -338,7 +361,7 @@ describe('DELETE /api/screening/[id]', () => {
     const otherCookie = await startAnonymousSession()
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
       method: 'DELETE',
-      headers: { cookie: otherCookie }
+      headers: withCsrf(otherCookie)
     })
     expect(response.status).toBe(403)
 
@@ -352,7 +375,7 @@ describe('DELETE /api/screening/[id]', () => {
       `${server.baseUrl}/api/screening/00000000-0000-0000-0000-000000000000`,
       {
         method: 'DELETE',
-        headers: { cookie }
+        headers: withCsrf(cookie)
       }
     )
     expect(response.status).toBe(404)
@@ -364,7 +387,7 @@ describe('DELETE /api/screening/[id]', () => {
 
     await fetch(`${server.baseUrl}/api/screening/${sessionId}`, {
       method: 'DELETE',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
     const entries = await prisma.auditLog.findMany({
@@ -395,20 +418,31 @@ describe('idempotent answer replay', () => {
 })
 
 describe('item 9 positive -> CRISIS with an Escalation row', () => {
-  it('produces a CRISIS result, escalated=true, and a PENDING Escalation row', async () => {
+  it('produces a CRISIS result, escalated=true, and — with active HUMAN_REVIEW consent — a PENDING Escalation row', async () => {
     const cookie = await startAnonymousSession()
     const { sessionId } = await startScreening(cookie)
+
+    // [FR6][NFR1] Escalation-row creation is consent-gated (server/domain/consent.ts) —
+    // granting HUMAN_REVIEW here is what makes the row-creation assertion below meaningful; a
+    // CRISIS result with no such consent still reports escalated=true but creates no row, which
+    // is covered separately in tests/integration/clinician.test.ts.
+    await fetch(`${server.baseUrl}/api/privacy/consent`, {
+      method: 'POST',
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
+      body: JSON.stringify({ purpose: 'HUMAN_REVIEW', granted: true, consentVersion: '1' })
+    })
 
     await answerAll(cookie, sessionId, { ...allItemsAtZero(), PHQ9_Q9: 1 })
 
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const body = await response.json()
 
     expect(body.riskLevel).toBe('CRISIS')
     expect(body.escalated).toBe(true)
+    expect(body.escalationRecorded).toBe(true)
 
     const triageResult = await prisma.triageResult.findUnique({ where: { sessionId } })
     expect(triageResult?.riskLevel).toBe('CRISIS')
@@ -428,7 +462,7 @@ describe('item 9 positive -> CRISIS with an Escalation row', () => {
 
     const response = await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const body = await response.json()
     expect(body.riskLevel).toBe('CRISIS')
@@ -442,7 +476,7 @@ describe('audit logging', () => {
     await answerAll(cookie, sessionId, allItemsAtZero())
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
     const entries = await prisma.auditLog.findMany({
@@ -457,10 +491,12 @@ describe('audit logging', () => {
     await answerAll(cookie, sessionId, { ...allItemsAtZero(), PHQ9_Q9: 1 })
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
-    await fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, { headers: { cookie } })
+    await fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, {
+      headers: withCsrf(cookie)
+    })
 
     const entries = await prisma.auditLog.findMany({
       where: {
@@ -478,10 +514,12 @@ describe('audit logging', () => {
     await answerAll(cookie, sessionId, allItemsAtZero())
     await fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
-    await fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, { headers: { cookie } })
+    await fetch(`${server.baseUrl}/api/screening/${sessionId}/result`, {
+      headers: withCsrf(cookie)
+    })
 
     const entries = await prisma.auditLog.findMany({
       where: {
@@ -799,12 +837,13 @@ describe('graceful degradation — classifier unavailable at submission time (ru
 
   async function startSession(): Promise<{ cookie: string; sessionId: string }> {
     const anon = await fetch(`${degradedServer.baseUrl}/api/auth/anonymous-start`, {
-      method: 'POST'
+      method: 'POST',
+      headers: withCsrf()
     })
     const cookie = extractCookie(anon)!
     const started = await fetch(`${degradedServer.baseUrl}/api/screening/start`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const { sessionId } = await started.json()
     return { cookie, sessionId }
@@ -815,7 +854,7 @@ describe('graceful degradation — classifier unavailable at submission time (ru
 
     const response = await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/text`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'I feel hopeless today' })
     })
     expect(response.status).toBe(200)
@@ -832,19 +871,19 @@ describe('graceful degradation — classifier unavailable at submission time (ru
     for (const item of [...PHQ9_ITEMS, ...GAD7_ITEMS]) {
       await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/answer`, {
         method: 'POST',
-        headers: { cookie, 'content-type': 'application/json' },
+        headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
         body: JSON.stringify({ itemCode: item.itemCode, rawValue: 0 })
       })
     }
     await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/text`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'hopeless worthless give up completely' })
     })
 
     const response = await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const body = await response.json()
 
@@ -859,24 +898,43 @@ describe('graceful degradation — classifier unavailable at submission time (ru
     for (const item of [...PHQ9_ITEMS, ...GAD7_ITEMS]) {
       await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/answer`, {
         method: 'POST',
-        headers: { cookie, 'content-type': 'application/json' },
+        headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
         body: JSON.stringify({ itemCode: item.itemCode, rawValue: 0 })
       })
     }
     await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/text`, {
       method: 'POST',
-      headers: { cookie, 'content-type': 'application/json' },
+      headers: { ...withCsrf(cookie), 'content-type': 'application/json' },
       body: JSON.stringify({ text: 'some text the classifier never got to see' })
     })
     await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/complete`, {
       method: 'POST',
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
 
     const response = await fetch(`${degradedServer.baseUrl}/api/screening/${sessionId}/result`, {
-      headers: { cookie }
+      headers: withCsrf(cookie)
     })
     const body = await response.json()
     expect(body.textAnalysis).toEqual({ available: false, reason: 'unavailable' })
+  })
+})
+
+describe('rate limiting on start and complete (NFR1)', () => {
+  it('rate limits repeated calls from the same IP', async () => {
+    // A synthetic IP this test owns exclusively, so it doesn't compete with — or get skewed by
+    // — every other test in this file sharing the loopback address.
+    const ip = `10.${randomInt(1, 255)}.${randomInt(1, 255)}.${randomInt(1, 255)}`
+    const cookie = await startAnonymousSession()
+
+    let lastStatus = 0
+    for (let i = 0; i < 101; i++) {
+      const response = await fetch(`${server.baseUrl}/api/screening/start`, {
+        method: 'POST',
+        headers: { ...withCsrf(cookie), 'x-forwarded-for': ip }
+      })
+      lastStatus = response.status
+    }
+    expect(lastStatus).toBe(429)
   })
 })

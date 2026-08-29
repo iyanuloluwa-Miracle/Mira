@@ -12,9 +12,16 @@ export default defineEventHandler(async (event) => {
   const start = Date.now()
   const user = requireUser(event)
 
+  const ip = getRequestIP(event, { xForwardedFor: true }) ?? 'unknown'
+  const rateLimit = screeningSubmissionRateLimiter.consume(hashIdentifier(ip))
+  if (!rateLimit.allowed) tooManyRequestsError()
+
   const body = (await readBody(event).catch(() => undefined)) ?? {}
   const parsed = bodySchema.safeParse(body)
   if (!parsed.success) badRequestError('This endpoint does not accept a request body.')
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
 
   const session = await prisma.screeningSession.create({
     data: { userId: user.id, instrument: 'COMBINED', status: 'IN_PROGRESS' }

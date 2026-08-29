@@ -52,3 +52,48 @@ export function getLlmConfig(): LlmConfig {
 
   return { mode, apiKey, model, timeoutMs }
 }
+
+export interface RetentionConfig {
+  freeTextRetentionDays: number
+  abandonedSessionRetentionDays: number
+  auditLogRetentionMonths: number
+}
+
+const DEFAULT_FREE_TEXT_RETENTION_DAYS = 90
+const DEFAULT_ABANDONED_SESSION_RETENTION_DAYS = 30
+const DEFAULT_AUDIT_LOG_RETENTION_MONTHS = 12
+
+function parsePositiveInt(value: string | undefined, fallback: number): number {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+// [NFR1] Storage-limitation windows for server/tasks/retention.ts. Every default here is
+// documented once, consistently, across .env.example, this file, docs/ndpa-mapping.md, and the
+// public /privacy notice — the retention task, the docs, and the notice a real person reads
+// must never be able to drift out of sync with each other.
+export function getRetentionConfig(): RetentionConfig {
+  return {
+    freeTextRetentionDays: parsePositiveInt(
+      process.env.FREE_TEXT_RETENTION_DAYS,
+      DEFAULT_FREE_TEXT_RETENTION_DAYS
+    ),
+    abandonedSessionRetentionDays: parsePositiveInt(
+      process.env.ABANDONED_SESSION_RETENTION_DAYS,
+      DEFAULT_ABANDONED_SESSION_RETENTION_DAYS
+    ),
+    auditLogRetentionMonths: parsePositiveInt(
+      process.env.AUDIT_LOG_RETENTION_MONTHS,
+      DEFAULT_AUDIT_LOG_RETENTION_MONTHS
+    )
+  }
+}
+
+// [Chapter Four, Section 3.8.3] Off by default. A usability-test participant's screen
+// transitions, back-navigations, error encounters and task timings are only ever recorded when
+// this is explicitly turned on for a scheduled evaluation session — never during ordinary use
+// — and even then, only after server/api/admin/evaluation/start.post.ts has recorded that
+// consent was given (EvaluationSession.consentedAt is a required field, not an assumption).
+export function isEvaluationModeEnabled(): boolean {
+  return process.env.EVALUATION_MODE === 'true'
+}

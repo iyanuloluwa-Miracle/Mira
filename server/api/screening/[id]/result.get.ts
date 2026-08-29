@@ -7,12 +7,34 @@
 
 import { buildTextAnalysis } from '../../../utils/text-analysis'
 
+// [FR5] Reads back the ResourceRecommendation rows persisted at completion time
+// (server/api/screening/[id]/complete.post.ts computes and persists them once) rather than
+// recomputing — recommendations, like the TriageResult itself, are decided once and stay stable
+// afterward, even if the resource catalogue changes later.
+async function loadRecommendedResources(triageResultId: string) {
+  const rows = await prisma.resourceRecommendation.findMany({
+    where: { triageResultId },
+    orderBy: { rank: 'asc' },
+    include: { resource: { select: { slug: true, title: true, readingTimeMinutes: true } } }
+  })
+  return rows.map((row) => ({
+    slug: row.resource.slug,
+    title: row.resource.title,
+    readingTimeMinutes: row.resource.readingTimeMinutes
+  }))
+}
+
 export default defineEventHandler(async (event) => {
   const start = Date.now()
   const user = requireUser(event)
 
-  const sessionId = getRouterParam(event, 'id')
-  if (!sessionId) badRequestError('A session id is required.')
+  const parsedParam = uuidParamSchema.safeParse(getRouterParam(event, 'id'))
+  if (!parsedParam.success) badRequestError('A valid session id is required.')
+  const sessionId = parsedParam.data
+
+  if (!emptyQuerySchema.safeParse(getQuery(event)).success) {
+    badRequestError('This endpoint does not accept a query string.')
+  }
 
   const session = await prisma.screeningSession.findUnique({
     where: { id: sessionId },
@@ -42,6 +64,14 @@ export default defineEventHandler(async (event) => {
     modelPredictions: session.modelPredictions,
     riskLevel: session.triageResult.riskLevel
   })
+  const resources = await loadRecommendedResources(session.triageResult.id)
+  // [FR6][NFR1] Whether this result actually entered the clinician queue — see
+  // server/domain/consent.ts and complete.post.ts's own comment on the same check. Re-derived
+  // from whether a row exists, not stored redundantly on TriageResult.
+  const escalation = await prisma.escalation.findUnique({
+    where: { triageResultId: session.triageResult.id },
+    select: { id: true }
+  })
 
   return {
     sessionId: session.id,
@@ -52,7 +82,9 @@ export default defineEventHandler(async (event) => {
     riskLevel: session.triageResult.riskLevel,
     rationale: session.triageResult.rationaleJson,
     escalated: session.triageResult.escalated,
+    escalationRecorded: !!escalation,
     textAnalysis,
+    resources,
     serverTimeMs: Date.now() - start
   }
 })

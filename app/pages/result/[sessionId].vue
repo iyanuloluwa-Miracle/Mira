@@ -21,8 +21,9 @@ import {
   GAD7_BAND_PHRASES,
   GAD7_SCORE_LABEL,
   GAD7_SCORE_RANGE_LABEL,
-  NEXT_STEPS_BODY,
+  NEXT_STEPS_EMPTY_FALLBACK,
   NEXT_STEPS_HEADING,
+  NEXT_STEPS_INTRO,
   NOT_A_DIAGNOSIS_CLOSING,
   NOT_A_DIAGNOSIS_HEADING,
   NOT_A_DIAGNOSIS_POINTS,
@@ -42,6 +43,7 @@ const route = useRoute()
 const sessionId = route.params.sessionId as string
 
 const { state, discard } = useScreeningSession()
+const { logError } = useEvaluation()
 
 // state is wrapped in readonly() by the composable — cast away its readonly array/property
 // wrapper here, not the value itself, which is a plain ScreeningResult at runtime.
@@ -59,12 +61,16 @@ onMounted(async () => {
     )) as unknown as ScreeningResult
   } catch {
     loadError.value = "We couldn't find that screening result."
+    logError()
   } finally {
     loading.value = false
   }
 })
 
 const showCrisis = computed(() => result.value?.riskLevel === 'CRISIS')
+// [FR6] CRISIS keeps its own unconditional interrupt above — this is only for the other
+// escalate-worthy band (HIGH), which still shows the normal result content plus this section.
+const showReferral = computed(() => !!result.value?.escalated && !showCrisis.value)
 
 const bandIntro = computed(() => {
   if (!result.value) return ''
@@ -87,6 +93,7 @@ async function handleDelete() {
     deleted.value = true
   } catch {
     deleteError.value = DELETE_SESSION_ERROR_MESSAGE
+    logError()
   } finally {
     deleting.value = false
     confirmingDelete.value = false
@@ -121,6 +128,13 @@ useHead({ title: 'Your result' })
     <div v-else-if="result" class="mt-6 flex flex-col gap-8">
       <!-- 1. The band, in plain language. Never a diagnosis, never a disorder name as a conclusion. -->
       <h1 class="text-2xl font-semibold text-slate-900">{{ bandIntro }}</h1>
+
+      <!-- 1a. The escalation referral screen (FR6) — HIGH risk only; CRISIS never reaches here. -->
+      <SafetyReferralScreen
+        v-if="showReferral"
+        :session-id="sessionId"
+        :escalation-recorded="result.escalationRecorded"
+      />
 
       <!-- 2. Numeric scores with their possible range, for both instruments. -->
       <section class="flex flex-col gap-3">
@@ -186,10 +200,29 @@ useHead({ title: 'Your result' })
         <p class="mt-3 text-sm text-amber-900">{{ NOT_A_DIAGNOSIS_CLOSING }}</p>
       </section>
 
-      <!-- 5. Recommended next steps and resources (full resource matching: prompt 15). -->
+      <!-- 5. Recommended next steps and resources (FR5). -->
       <section>
         <h2 class="text-lg font-semibold text-slate-900">{{ NEXT_STEPS_HEADING }}</h2>
-        <p class="mt-1 text-sm text-slate-700">{{ NEXT_STEPS_BODY }}</p>
+        <p class="mt-1 text-sm text-slate-700">{{ NEXT_STEPS_INTRO }}</p>
+
+        <ul v-if="result.resources.length > 0" class="mt-3 flex flex-col gap-2">
+          <li v-for="resource in result.resources" :key="resource.slug">
+            <NuxtLink
+              :to="`/resources/${resource.slug}`"
+              class="flex min-h-[44px] items-center justify-between gap-3 rounded-lg border border-slate-200 px-4 py-3 hover:bg-slate-50"
+            >
+              <span class="text-sm font-medium text-slate-900">{{ resource.title }}</span>
+              <span class="shrink-0 text-xs text-slate-500"
+                >{{ resource.readingTimeMinutes }} min read</span
+              >
+            </NuxtLink>
+          </li>
+        </ul>
+        <p v-else class="mt-3 text-sm text-slate-700">{{ NEXT_STEPS_EMPTY_FALLBACK }}</p>
+
+        <NuxtLink to="/resources" class="mt-3 inline-block text-sm text-indigo-700 underline">
+          Browse the full resource library
+        </NuxtLink>
       </section>
 
       <!-- 6. Delete this session's data immediately. -->

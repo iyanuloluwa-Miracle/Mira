@@ -43,10 +43,21 @@ const {
   complete
 } = useScreeningSession()
 
+const { logError } = useEvaluation()
+
 const ready = ref(false)
 const loadError = ref<string | null>(null)
 const completing = ref(false)
 const completeError = ref<string | null>(null)
+
+// [Chapter Four, Section 3.8.3] Moving between questions never triggers a route change (it's
+// all one page, tracked in-memory) — the global evaluation-tracking middleware only sees route
+// changes, so a real in-app back-navigation signal (someone reconsidering an earlier answer)
+// needs its own explicit call here.
+function handleBack() {
+  goBack()
+  useEvaluation().logEvent({ type: 'BACK_NAVIGATION', screen: route.path })
+}
 
 onMounted(async () => {
   if (state.value.sessionId !== sessionId) {
@@ -101,6 +112,7 @@ async function finishScreening() {
   } catch (error) {
     completeError.value = error instanceof Error ? error.message : 'Something went wrong.'
     completing.value = false
+    logError()
   }
 }
 
@@ -111,6 +123,7 @@ async function handleSubmitFreeText() {
     await submitFreeText(freeTextInput.value.trim())
   } catch {
     freeTextError.value = FREE_TEXT_SUBMIT_ERROR
+    logError()
     return
   }
   await finishScreening()
@@ -122,6 +135,7 @@ async function handleSkipFreeText() {
     await skipFreeText()
   } catch {
     freeTextError.value = FREE_TEXT_SUBMIT_ERROR
+    logError()
     return
   }
   await finishScreening()
@@ -217,7 +231,7 @@ async function handleSkipFreeText() {
           type="button"
           class="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-4 py-3 text-base font-semibold text-slate-900 disabled:opacity-40"
           :disabled="state.currentIndex === 0"
-          @click="goBack"
+          @click="handleBack"
         >
           Back
         </button>

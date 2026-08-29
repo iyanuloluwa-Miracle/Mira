@@ -25,6 +25,14 @@ export type TextAnalysis =
   | { available: true; spans: AttributionSpan[] }
   | { available: false; reason: 'text-free' | 'unavailable' }
 
+// [FR5] What the resource-recommendation API returns per resource — just enough to link to and
+// label it; the full body only loads on the resource's own detail page.
+export interface RecommendedResource {
+  slug: string
+  title: string
+  readingTimeMinutes: number
+}
+
 export interface ScreeningResult {
   riskLevel: string
   phq9Total: number
@@ -33,7 +41,9 @@ export interface ScreeningResult {
   gad7Band: string
   rationale: string[]
   escalated: boolean
+  escalationRecorded: boolean
   textAnalysis: TextAnalysis
+  resources: RecommendedResource[]
 }
 
 interface ScreeningState {
@@ -290,16 +300,33 @@ export function useScreeningSession() {
       )
     }
 
+    const sessionId = state.value.sessionId
+    // [NFR3] Browser-observed round trip for this specific request, including network — the
+    // "end to end" half of the screening-completion latency pair (see server/utils/metrics.ts
+    // and docs/evaluation-data-dictionary.md; the server-side half, serverLatencyMs, is recorded
+    // by complete.post.ts itself and can't include what happens before the request even reaches
+    // the server).
+    const requestStart = performance.now()
+
     // Nuxt infers this route's response type automatically from the server handler, which
     // widens rationale to Prisma's generic Json type — cast back to what complete.post.ts
     // actually always writes (its own triage.rationale array) rather than fighting that
     // inference with a generic that gets merged rather than overridden.
-    const result = (await $fetch(`/api/screening/${state.value.sessionId}/complete`, {
+    const result = (await $fetch(`/api/screening/${sessionId}/complete`, {
       method: 'POST'
     })) as unknown as ScreeningResult
     state.value.status = 'completed'
     state.value.result = result
-    clearPersisted(state.value.sessionId)
+    clearPersisted(sessionId)
+
+    // Best-effort, never allowed to affect the completion the person is waiting on — a failed
+    // metrics write here must not surface as a screening error.
+    const clientLatencyMs = Math.round(performance.now() - requestStart)
+    void $fetch('/api/metrics/client', {
+      method: 'POST',
+      body: { name: 'screening_complete', valueMs: clientLatencyMs, sessionId }
+    }).catch(() => {})
+
     return result
   }
 

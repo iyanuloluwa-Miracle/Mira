@@ -16,6 +16,7 @@ async function handleSubmit() {
     await navigateTo('/')
   } catch {
     error.value = 'Incorrect email or password.'
+    useEvaluation().logError()
   } finally {
     submitting.value = false
   }
@@ -62,6 +63,11 @@ async function handleSubmit() {
         {{ submitting ? 'Signing in…' : 'Sign in' }}
       </button>
     </form>
+
+    <p class="text-center text-sm text-slate-600">
+      Don't have an account?
+      <NuxtLink to="/register" class="text-indigo-700 underline">Create one</NuxtLink>
+    </p>
 
     <NuxtLink to="/" class="text-center text-sm text-indigo-700 underline">Back</NuxtLink>
   </main>

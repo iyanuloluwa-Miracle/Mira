@@ -69,14 +69,19 @@ export const NOT_A_DIAGNOSIS_CLOSING =
   'toward the right kind of support next — not to tell you what is wrong.'
 
 // ---------------------------------------------------------------------------------------------
-// RESULT PAGE — next steps (placeholder ahead of prompt 15's resource matching)
+// RESULT PAGE — next steps (FR5 resource recommendations)
 // ---------------------------------------------------------------------------------------------
 
 export const NEXT_STEPS_HEADING = 'Next steps'
-export const NEXT_STEPS_BODY =
-  "We're building a library of resources matched to results like yours. In the meantime, " +
-  'consider talking to someone you trust, or a licensed counsellor, about how you have been ' +
-  'feeling.'
+export const NEXT_STEPS_INTRO =
+  'A few resources picked for this result — or browse the full library any time from the ' +
+  'Resources link, whether or not you have completed a screening.'
+// Not expected in normal operation (server/domain/resources.ts guarantees a non-empty list for
+// every risk level given the current content set) — kept as an honest fallback rather than
+// silently rendering an empty section if it ever were.
+export const NEXT_STEPS_EMPTY_FALLBACK =
+  'Resource matching is temporarily unavailable. In the meantime, consider talking to someone ' +
+  'you trust, or a licensed counsellor, about how you have been feeling.'
 
 // ---------------------------------------------------------------------------------------------
 // FREE-TEXT STEP — after the instruments, before finishing (FR3)

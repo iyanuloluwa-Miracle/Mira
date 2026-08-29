@@ -12,6 +12,10 @@ const percentage = computed(() =>
   props.total > 0 ? Math.round((props.current / props.total) * 100) : 0
 )
 const announcement = computed(() => `Question ${props.current} of ${props.total}`)
+
+// See app/composables/useWidthClass.ts: a closed set of Tailwind classes instead of a `:style`
+// binding, which would need 'unsafe-inline' in the CSP's style-src.
+const widthClass = computed(() => useWidthClass(percentage.value))
 </script>
 
 <template>
@@ -25,8 +29,7 @@ const announcement = computed(() => `Question ${props.current} of ${props.total}
       :aria-label="announcement"
     >
       <div
-        class="h-full rounded-full bg-indigo-600 transition-[width] duration-300"
-        :style="{ width: `${percentage}%` }"
+        :class="['h-full rounded-full bg-indigo-600 transition-[width] duration-300', widthClass]"
       />
     </div>
     <p class="mt-2 text-sm text-slate-600" aria-live="polite" aria-atomic="true">

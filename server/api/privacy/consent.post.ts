@@ -8,7 +8,7 @@ import { z } from 'zod'
 
 const bodySchema = z
   .object({
-    purpose: z.enum(['SCREENING', 'RESEARCH_LOGGING']),
+    purpose: z.enum(['SCREENING', 'RESEARCH_LOGGING', 'HUMAN_REVIEW']),
     granted: z.boolean(),
     consentVersion: z.string().min(1).max(50)
   })

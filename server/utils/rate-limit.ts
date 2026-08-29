@@ -66,3 +66,37 @@ export class InMemoryRateLimiter implements RateLimiter {
 // force / enumeration: 10 attempts per 15 minutes per hashed IP. A single process-wide
 // instance so the limit applies across requests, not per-request.
 export const authRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 15 * 60 * 1000)
+
+// [FR7] A separate instance, not a shared budget with authRateLimiter — the clinician realm is
+// deliberately isolated from the person-being-screened realm end to end (see
+// server/utils/clinician-auth.ts), and sharing a rate-limit bucket would be one more place the
+// two could bleed into each other.
+export const clinicianAuthRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 15 * 60 * 1000)
+
+// [FR2][NFR1] Moderate: covers starting and completing a screening session — the two heaviest
+// and most consequential points in the flow (complete.post.ts runs scoring, triage, the
+// classifier-adjustment path, and an interactive transaction). Deliberately not as tight as
+// authRateLimiter: unlike a login attempt, this is one hashed IP potentially shared by many
+// legitimate concurrent people (a shared campus or family connection is a realistic part of this
+// app's low-resource-device audience, NFR2), and a real person starting or completing more than
+// a couple of screenings in five minutes is already implausible — 100 stays comfortably below
+// anything a scripted flood wouldn't hit almost immediately, while never being the thing a real
+// person notices.
+export const screeningSubmissionRateLimiter: RateLimiter = new InMemoryRateLimiter(
+  100,
+  5 * 60 * 1000
+)
+
+// [R6][NFR1] Strict: every call reaches the bounded conversational layer, which means a real
+// network call to the LLM provider on the common path — the most expensive request in this
+// app by a wide margin, and the one most worth bounding tightly regardless of session-level
+// token budgets (server/services/conversation), which only cap a single session, not request
+// rate across sessions.
+export const conversationRateLimiter: RateLimiter = new InMemoryRateLimiter(10, 60 * 1000)
+
+// [Chapter Four, Section 3.8.3] Generous, not strict: a real usability-test participant can
+// legitimately produce a screen transition or a back-navigation on nearly every interaction, and
+// this must never be the reason a real observation goes missing from the evidence it's collecting.
+// Still bounded, so a stray loop (a broken redirect, for instance) can't grow the Metric-adjacent
+// evaluation_events table unbounded.
+export const evaluationEventRateLimiter: RateLimiter = new InMemoryRateLimiter(300, 5 * 60 * 1000)
