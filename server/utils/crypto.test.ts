@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { assertEncryptionKeyPresent, decryptField, encryptField } from './crypto'
+import { assertEncryptionKeyPresent, decryptField, encryptField, toPrismaBytes } from './crypto'
 
 const ORIGINAL_KEY = process.env.ENCRYPTION_KEY
 
@@ -85,5 +85,13 @@ describe('with a malformed key', () => {
   it('throws when the key does not decode to 32 bytes', () => {
     process.env.ENCRYPTION_KEY = Buffer.from('too-short').toString('base64')
     expect(() => assertEncryptionKeyPresent()).toThrow(/32-byte/)
+  })
+})
+
+describe('toPrismaBytes', () => {
+  it('returns the same bytes, narrowed for Prisma Bytes columns', () => {
+    const buffer = Buffer.from('some encrypted bytes')
+    const narrowed = toPrismaBytes(buffer)
+    expect(Buffer.from(narrowed).equals(buffer)).toBe(true)
   })
 })

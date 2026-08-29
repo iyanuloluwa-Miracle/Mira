@@ -45,4 +45,26 @@ describe('InMemoryRateLimiter', () => {
       vi.useRealTimers()
     }
   })
+
+  it('sweeps expired windows once the map grows past the threshold, without losing a still-active one', () => {
+    vi.useFakeTimers()
+    try {
+      const limiter = new InMemoryRateLimiter(5, 1000)
+
+      // These 10,001 keys' windows are all expired by the time the sweep threshold is crossed —
+      // the sweep triggers on the very next consume() call once the map holds more than 10,000
+      // entries (SWEEP_THRESHOLD), so it fires partway through this loop, not after it.
+      for (let i = 0; i < 10_001; i++) limiter.consume(`stale-${i}`)
+
+      vi.advanceTimersByTime(1001)
+
+      // A key whose window is still within its (now-refreshed) budget must survive the sweep
+      // pass triggered by the next consume() below, not be evicted along with the expired ones.
+      const fresh = limiter.consume('fresh-key')
+      expect(fresh.allowed).toBe(true)
+      expect(fresh.remaining).toBe(4)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
 })
