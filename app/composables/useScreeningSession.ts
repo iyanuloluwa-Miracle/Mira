@@ -300,16 +300,33 @@ export function useScreeningSession() {
       )
     }
 
+    const sessionId = state.value.sessionId
+    // [NFR3] Browser-observed round trip for this specific request, including network — the
+    // "end to end" half of the screening-completion latency pair (see server/utils/metrics.ts
+    // and docs/evaluation-data-dictionary.md; the server-side half, serverLatencyMs, is recorded
+    // by complete.post.ts itself and can't include what happens before the request even reaches
+    // the server).
+    const requestStart = performance.now()
+
     // Nuxt infers this route's response type automatically from the server handler, which
     // widens rationale to Prisma's generic Json type — cast back to what complete.post.ts
     // actually always writes (its own triage.rationale array) rather than fighting that
     // inference with a generic that gets merged rather than overridden.
-    const result = (await $fetch(`/api/screening/${state.value.sessionId}/complete`, {
+    const result = (await $fetch(`/api/screening/${sessionId}/complete`, {
       method: 'POST'
     })) as unknown as ScreeningResult
     state.value.status = 'completed'
     state.value.result = result
-    clearPersisted(state.value.sessionId)
+    clearPersisted(sessionId)
+
+    // Best-effort, never allowed to affect the completion the person is waiting on — a failed
+    // metrics write here must not surface as a screening error.
+    const clientLatencyMs = Math.round(performance.now() - requestStart)
+    void $fetch('/api/metrics/client', {
+      method: 'POST',
+      body: { name: 'screening_complete', valueMs: clientLatencyMs, sessionId }
+    }).catch(() => {})
+
     return result
   }
 

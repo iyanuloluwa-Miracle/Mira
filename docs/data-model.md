@@ -286,6 +286,18 @@ never carry PHI or free text; there's no redactor sitting between this table and
 writes to it the way there is for `server/utils/logger.ts` (rule R4), so that discipline is
 enforced by code review on anything that writes an `AuditLog` row, not by the schema.
 
+### Evaluation instrumentation (NFR3, Chapter Four Section 3.8.3)
+
+Also left off the diagram above, for the same reason `AuditLog` is: `Metric` has no foreign key
+at all — `sessionId` is a plain nullable column, deliberately not a relation, so a latency
+observation survives a `ScreeningSession` being deleted (rule R9) or expiring under the
+retention task (`server/tasks/retention.ts`). `EvaluationSession` and `EvaluationEvent` (linked
+to each other by a real foreign key, cascading) are a separate, self-contained subsystem for
+usability-test evidence — never linked to `User`, gated by `EVALUATION_MODE`
+(`config/runtime.ts`) and a required `consentedAt` column, not by convention. See
+[evaluation-data-dictionary.md](evaluation-data-dictionary.md) for what every field on all three
+tables means and where each one is read.
+
 ## Deletion and retention
 
 Deleting a `User` cascades all the way down through `ScreeningSession` → `ItemResponse` /

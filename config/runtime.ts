@@ -88,3 +88,12 @@ export function getRetentionConfig(): RetentionConfig {
     )
   }
 }
+
+// [Chapter Four, Section 3.8.3] Off by default. A usability-test participant's screen
+// transitions, back-navigations, error encounters and task timings are only ever recorded when
+// this is explicitly turned on for a scheduled evaluation session — never during ordinary use
+// — and even then, only after server/api/admin/evaluation/start.post.ts has recorded that
+// consent was given (EvaluationSession.consentedAt is a required field, not an assumption).
+export function isEvaluationModeEnabled(): boolean {
+  return process.env.EVALUATION_MODE === 'true'
+}

@@ -19,6 +19,7 @@ async function handleSubmit() {
   } catch (err) {
     const fetchError = err as { data?: { statusMessage?: string } }
     error.value = fetchError.data?.statusMessage ?? 'Something went wrong. Please try again.'
+    useEvaluation().logError()
   } finally {
     submitting.value = false
   }

@@ -393,3 +393,75 @@ model AuditLog {
   @@index([actorType, actorId])
   @@map("audit_logs")
 }
+
+// --- Evaluation instrumentation (Chapter Four evidence) -----------------------------------
+
+// [NFR3] One latency observation. name distinguishes the operation (e.g.
+// "screening_complete_server_ms", "classifier_call_e2e_ms" — see
+// docs/evaluation-data-dictionary.md for the full, exact list and what each one measures).
+// sessionId is deliberately not a foreign key: this table is read in bulk, long after an
+// individual ScreeningSession may already be gone (a person can delete a session immediately,
+// rule R9; free text and abandoned sessions are deleted on a schedule, NFR1) — a latency
+// observation outliving the session it was measured on is the point, not a bug, the same
+// reasoning AuditLog above already applies to actorId.
+model Metric {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  valueMs   Int
+  sessionId String?  @db.Uuid
+  createdAt DateTime @default(now())
+
+  @@index([name, createdAt])
+  @@map("metrics")
+}
+
+// [Chapter Four, Section 3.8.3] One moderated-usability-test sitting. Identified only by a
+// participant code the researcher enters at session start (never linked to User — this is a
+// study record, not an account) and only ever created once informed consent has already been
+// given: consentedAt is required, not optional, so "evaluation logging is off unless the flag
+// is set AND the participant has consented" is an enforced fact about this row, not a trusted
+// external process. See server/api/admin/evaluation/start.post.ts.
+model EvaluationSession {
+  id              String    @id @default(uuid()) @db.Uuid
+  participantCode String
+  consentedAt     DateTime
+  startedAt       DateTime  @default(now())
+  endedAt         DateTime?
+
+  events EvaluationEvent[]
+
+  @@index([participantCode])
+  @@map("evaluation_sessions")
+}
+
+// [Chapter Four, Section 3.8.3] Every event type Section 3.8.3 needs for task-completion rate
+// and median time on task. No content field exists on this model anywhere below, by design —
+// see EvaluationEvent's own comment.
+enum EvaluationEventType {
+  TASK_START
+  TASK_END
+  SCREEN_TRANSITION
+  BACK_NAVIGATION
+  ERROR_ENCOUNTERED
+  ABANDONMENT
+}
+
+// [Chapter Four, Section 3.8.3] taskId/screen are short, researcher-defined or route-derived
+// labels (e.g. "task-1-complete-screening", "/screen/[id]") — never user input, never free
+// text. completed is only meaningful on a TASK_END row. There is deliberately no field here
+// that could ever hold what a participant typed or said — this table answers "what happened
+// and when," never "what was written."
+model EvaluationEvent {
+  id                  String              @id @default(uuid()) @db.Uuid
+  evaluationSessionId String              @db.Uuid
+  type                EvaluationEventType
+  taskId              String?
+  screen              String?
+  completed           Boolean?
+  createdAt           DateTime            @default(now())
+
+  evaluationSession EvaluationSession @relation(fields: [evaluationSessionId], references: [id], onDelete: Cascade)
+
+  @@index([evaluationSessionId])
+  @@map("evaluation_events")
+}

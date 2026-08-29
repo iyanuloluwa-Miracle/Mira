@@ -88,7 +88,26 @@ export default defineEventHandler(async (event) => {
         topTokensJson: outcome.response.topTokens as unknown as Prisma.InputJsonValue
       }
     })
+    // [NFR3] e2e = the classifier call's own round trip (dial to response), already measured
+    // by the classifier client itself — the most complete measurement available for a
+    // dependency this app calls server-to-server, with no browser directly observing it.
+    await recordMetric({
+      name: 'classifier_call_e2e_ms',
+      valueMs: outcome.response.latencyMs,
+      sessionId: session.id
+    })
   }
+
+  // [NFR3] server = this whole endpoint's handling time, of which the classifier call above is
+  // one contributor among others (encryption, the FreeTextEntry write, the audit log below).
+  // Recorded whenever a classifier attempt was actually made (not the skip/already-submitted
+  // early returns above, which never reach this point) — success or failure both count, since
+  // "how long did this endpoint take" is meaningful either way.
+  await recordMetric({
+    name: 'classifier_call_server_ms',
+    valueMs: Date.now() - start,
+    sessionId: session.id
+  })
 
   await writeAuditLog({
     actorType: 'USER',

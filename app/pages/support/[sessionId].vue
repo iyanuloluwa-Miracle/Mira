@@ -56,6 +56,7 @@ const route = useRoute()
 const sessionId = route.params.sessionId as string
 
 const { state } = useScreeningSession()
+const { logError } = useEvaluation()
 
 const ready = ref(state.value.sessionId === sessionId && !!state.value.result)
 const loadError = ref<string | null>(null)
@@ -67,6 +68,7 @@ onMounted(async () => {
     ready.value = true
   } catch {
     loadError.value = "We couldn't find that screening result."
+    logError()
   }
 })
 
@@ -124,6 +126,7 @@ async function sendMessage(rawText: string) {
     messages.value.pop()
     draft.value = text
     sendError.value = CHAT_NETWORK_ERROR_MESSAGE
+    logError()
   } finally {
     sending.value = false
     await scrollToBottom()

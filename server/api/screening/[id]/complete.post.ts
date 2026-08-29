@@ -276,6 +276,17 @@ export default defineEventHandler(async (event) => {
     riskLevel: triage.riskLevel
   })
 
+  // [NFR3] Only on a real completion (never the "already completed" early return above) — that
+  // path is a cache-read, not a fresh measurement of how long completion actually took.
+  // Awaited (recordMetric itself never throws) rather than fire-and-forget: this is thesis
+  // evidence, and a detached write racing an early process exit is a real way to silently lose
+  // a row.
+  await recordMetric({
+    name: 'screening_complete_server_ms',
+    valueMs: serverLatencyMs,
+    sessionId: session.id
+  })
+
   return buildResultPayload(triageResult, textAnalysis, recommendedResources, !!escalation, start)
 })
 

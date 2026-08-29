@@ -43,6 +43,7 @@ const route = useRoute()
 const sessionId = route.params.sessionId as string
 
 const { state, discard } = useScreeningSession()
+const { logError } = useEvaluation()
 
 // state is wrapped in readonly() by the composable — cast away its readonly array/property
 // wrapper here, not the value itself, which is a plain ScreeningResult at runtime.
@@ -60,6 +61,7 @@ onMounted(async () => {
     )) as unknown as ScreeningResult
   } catch {
     loadError.value = "We couldn't find that screening result."
+    logError()
   } finally {
     loading.value = false
   }
@@ -91,6 +93,7 @@ async function handleDelete() {
     deleted.value = true
   } catch {
     deleteError.value = DELETE_SESSION_ERROR_MESSAGE
+    logError()
   } finally {
     deleting.value = false
     confirmingDelete.value = false

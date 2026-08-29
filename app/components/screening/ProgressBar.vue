@@ -13,39 +13,9 @@ const percentage = computed(() =>
 )
 const announcement = computed(() => `Question ${props.current} of ${props.total}`)
 
-// [NFR1] A literal, closed set of Tailwind arbitrary-value classes rather than a `:style`
-// binding — an inline `style` attribute would need `'unsafe-inline'` in the CSP's style-src
-// (server/plugins/security-headers.ts), which this app avoids everywhere, not just in
-// script-src. Every string below must appear literally in source for Tailwind's scanner to
-// generate the matching CSS at build time; percentage is rounded to the nearest 5% bucket.
-const WIDTH_CLASSES = [
-  'w-[0%]',
-  'w-[5%]',
-  'w-[10%]',
-  'w-[15%]',
-  'w-[20%]',
-  'w-[25%]',
-  'w-[30%]',
-  'w-[35%]',
-  'w-[40%]',
-  'w-[45%]',
-  'w-[50%]',
-  'w-[55%]',
-  'w-[60%]',
-  'w-[65%]',
-  'w-[70%]',
-  'w-[75%]',
-  'w-[80%]',
-  'w-[85%]',
-  'w-[90%]',
-  'w-[95%]',
-  'w-[100%]'
-] as const
-
-const widthClass = computed(() => {
-  const bucket = Math.min(20, Math.max(0, Math.round(percentage.value / 5)))
-  return WIDTH_CLASSES[bucket]
-})
+// See app/composables/useWidthClass.ts: a closed set of Tailwind classes instead of a `:style`
+// binding, which would need 'unsafe-inline' in the CSP's style-src.
+const widthClass = computed(() => useWidthClass(percentage.value))
 </script>
 
 <template>
