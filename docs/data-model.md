@@ -312,7 +312,7 @@ against every table, not just the ones the deletion code remembered to touch.
 The initial migration lives at
 [`prisma/migrations/20260821000000_init/`](../prisma/migrations/20260821000000_init/). It was
 generated offline with `prisma migrate diff --from-empty --to-schema-datamodel` because no
-Postgres instance was reachable in the environment that authored it — run `docker compose up -d
-db` followed by `npx prisma migrate dev` against a real database before trusting this migration
-in any environment that matters, and let `prisma migrate dev` take over authoring migrations
-from this point on.
+Postgres instance was reachable in the environment that authored it — get a real database running
+first (see [docs/local-setup.md](local-setup.md)) and run `npx prisma migrate dev` against it
+before trusting this migration in any environment that matters, and let `prisma migrate dev` take
+over authoring migrations from this point on.
