@@ -43,12 +43,18 @@ export default defineEventHandler(async (event) => {
   // [NFR3] Fulfils the ScreeningSession.clientLatencyMs column's own original intent —
   // browser-observed round trip, alongside serverLatencyMs (complete.post.ts), on the row it
   // actually describes, in addition to the Metric row above (which is what percentile/export
-  // reporting actually reads).
+  // reporting actually reads). Best-effort, same as recordMetric itself: the session existed at
+  // the ownership check above but is a real target for the person's own immediate delete
+  // control (server/api/screening/[id].delete.ts) — this fire-and-forget analytics beacon
+  // racing that delete is expected, observed in practice, and must never turn into a visible
+  // error for either request.
   if (name === 'screening_complete') {
-    await prisma.screeningSession.update({
-      where: { id: sessionId },
-      data: { clientLatencyMs: valueMs }
-    })
+    await prisma.screeningSession
+      .update({
+        where: { id: sessionId },
+        data: { clientLatencyMs: valueMs }
+      })
+      .catch(() => {})
   }
 
   return { recorded: true }

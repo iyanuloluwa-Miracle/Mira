@@ -51,6 +51,50 @@ async function loadRecommendedResources(triageResultId: string): Promise<Recomme
 
 const bodySchema = z.object({}).strict()
 
+type LoadedSession = NonNullable<Awaited<ReturnType<typeof loadSession>>>
+type CompletedSession = LoadedSession & {
+  triageResult: NonNullable<LoadedSession['triageResult']>
+}
+
+function loadSession(sessionId: string) {
+  return prisma.screeningSession.findUnique({
+    where: { id: sessionId },
+    include: {
+      triageResult: true,
+      itemResponses: true,
+      freeTextEntries: { take: 1 },
+      modelPredictions: { orderBy: { createdAt: 'desc' }, take: 1 }
+    }
+  })
+}
+
+// [FR3][NFR5] Shared by the "already completed" early return below and by the race-recovery
+// path in the transaction's catch block — both need to build the exact same payload from an
+// already-completed session, just reached a different way.
+async function buildCompletedResponse(
+  session: CompletedSession,
+  start: number
+): Promise<ReturnType<typeof buildResultPayload>> {
+  const textAnalysis = buildTextAnalysis({
+    freeTextExcluded: session.freeTextExcluded,
+    freeTextEntries: session.freeTextEntries,
+    modelPredictions: session.modelPredictions,
+    riskLevel: session.triageResult.riskLevel
+  })
+  const resources = await loadRecommendedResources(session.triageResult.id)
+  const existingEscalation = await prisma.escalation.findUnique({
+    where: { triageResultId: session.triageResult.id },
+    select: { id: true }
+  })
+  return buildResultPayload(
+    session.triageResult,
+    textAnalysis,
+    resources,
+    !!existingEscalation,
+    start
+  )
+}
+
 export default defineEventHandler(async (event) => {
   const start = Date.now()
   const user = requireUser(event)
@@ -70,40 +114,15 @@ export default defineEventHandler(async (event) => {
     badRequestError('This endpoint does not accept a query string.')
   }
 
-  const session = await prisma.screeningSession.findUnique({
-    where: { id: sessionId },
-    include: {
-      triageResult: true,
-      itemResponses: true,
-      freeTextEntries: { take: 1 },
-      modelPredictions: { orderBy: { createdAt: 'desc' }, take: 1 }
-    }
-  })
+  const session = await loadSession(sessionId)
   if (!session) notFoundError('Screening session not found.')
   if (session.userId !== user.id) forbiddenError('This screening session belongs to someone else.')
 
+  // [FR3][NFR5] riskLevel is already known here (this session was completed before) — safe to
+  // build textAnalysis against the real value, unlike the fresh-completion path below where it
+  // isn't decided until computeTriage runs.
   if (session.status === 'COMPLETED' && session.triageResult) {
-    // [FR3][NFR5] riskLevel is already known here (this session was completed before) — safe
-    // to build textAnalysis against the real value, unlike the fresh-completion path below
-    // where it isn't decided until computeTriage runs.
-    const textAnalysis = buildTextAnalysis({
-      freeTextExcluded: session.freeTextExcluded,
-      freeTextEntries: session.freeTextEntries,
-      modelPredictions: session.modelPredictions,
-      riskLevel: session.triageResult.riskLevel
-    })
-    const resources = await loadRecommendedResources(session.triageResult.id)
-    const existingEscalation = await prisma.escalation.findUnique({
-      where: { triageResultId: session.triageResult.id },
-      select: { id: true }
-    })
-    return buildResultPayload(
-      session.triageResult,
-      textAnalysis,
-      resources,
-      !!existingEscalation,
-      start
-    )
+    return buildCompletedResponse(session as CompletedSession, start)
   }
   if (session.status !== 'IN_PROGRESS') {
     badRequestError('This screening session can no longer be completed.')
@@ -165,81 +184,106 @@ export default defineEventHandler(async (event) => {
     : []
   const shouldEscalate = triage.escalate && canCreateEscalationRecord(consentRecords)
 
-  const { triageResult, recommendedResources, escalation } = await prisma.$transaction(
-    async (tx) => {
-      const created = await tx.triageResult.create({
-        data: {
-          sessionId: session.id,
-          phq9Total: phq9Result.total,
-          gad7Total: gad7Result.total,
-          phq9Band: phq9Result.band,
-          gad7Band: gad7Result.band,
-          riskLevel: triage.riskLevel,
-          rationaleJson: triage.rationale,
-          escalated: triage.escalate
-        }
-      })
-
-      await tx.screeningSession.update({
-        where: { id: session.id },
-        data: { status: 'COMPLETED', completedAt, serverLatencyMs }
-      })
-
-      const escalation = shouldEscalate
-        ? await tx.escalation.create({
-            data: { triageResultId: created.id, status: 'PENDING' }
-          })
-        : null
-
-      // [FR5] Recommendations are decided once, here, alongside the triage result they're
-      // derived from, and never recomputed later — see loadRecommendedResources above.
-      const candidates = await tx.resource.findMany({
-        where: { isActive: true },
-        select: {
-          id: true,
-          slug: true,
-          title: true,
-          tags: true,
-          minRisk: true,
-          maxRisk: true,
-          readingTimeMinutes: true,
-          isActive: true
-        }
-      })
-      const drivingInstrument = determineDrivingInstrument(phq9Result.band, gad7Result.band)
-      const ranked: RankedResource[] = computeResourceRecommendations(
-        candidates,
-        triage.riskLevel,
-        drivingInstrument
-      )
-      if (ranked.length > 0) {
-        await tx.resourceRecommendation.createMany({
-          data: ranked.map((resource) => ({
-            triageResultId: created.id,
-            resourceId: resource.resourceId,
-            rank: resource.rank
-          }))
+  let transactionResult: {
+    triageResult: TriageResult
+    recommendedResources: RecommendedResource[]
+    escalation: Awaited<ReturnType<typeof prisma.escalation.create>> | null
+  }
+  try {
+    transactionResult = await prisma.$transaction(
+      async (tx) => {
+        const created = await tx.triageResult.create({
+          data: {
+            sessionId: session.id,
+            phq9Total: phq9Result.total,
+            gad7Total: gad7Result.total,
+            phq9Band: phq9Result.band,
+            gad7Band: gad7Result.band,
+            riskLevel: triage.riskLevel,
+            rationaleJson: triage.rationale,
+            escalated: triage.escalate
+          }
         })
-      }
 
-      return {
-        triageResult: created,
-        escalation,
-        recommendedResources: ranked.map((resource): RecommendedResource => ({
-          slug: resource.slug,
-          title: resource.title,
-          readingTimeMinutes: resource.readingTimeMinutes
-        }))
+        await tx.screeningSession.update({
+          where: { id: session.id },
+          data: { status: 'COMPLETED', completedAt, serverLatencyMs }
+        })
+
+        const escalation = shouldEscalate
+          ? await tx.escalation.create({
+              data: { triageResultId: created.id, status: 'PENDING' }
+            })
+          : null
+
+        // [FR5] Recommendations are decided once, here, alongside the triage result they're
+        // derived from, and never recomputed later — see loadRecommendedResources above.
+        const candidates = await tx.resource.findMany({
+          where: { isActive: true },
+          select: {
+            id: true,
+            slug: true,
+            title: true,
+            tags: true,
+            minRisk: true,
+            maxRisk: true,
+            readingTimeMinutes: true,
+            isActive: true
+          }
+        })
+        const drivingInstrument = determineDrivingInstrument(phq9Result.band, gad7Result.band)
+        const ranked: RankedResource[] = computeResourceRecommendations(
+          candidates,
+          triage.riskLevel,
+          drivingInstrument
+        )
+        if (ranked.length > 0) {
+          await tx.resourceRecommendation.createMany({
+            data: ranked.map((resource) => ({
+              triageResultId: created.id,
+              resourceId: resource.resourceId,
+              rank: resource.rank
+            }))
+          })
+        }
+
+        return {
+          triageResult: created,
+          escalation,
+          recommendedResources: ranked.map((resource): RecommendedResource => ({
+            slug: resource.slug,
+            title: resource.title,
+            readingTimeMinutes: resource.readingTimeMinutes
+          }))
+        }
+      },
+      // [NFR4] This transaction now does real work end to end (triage, an optional Escalation
+      // row, a resource query, and ranked ResourceRecommendation rows) against Neon's real,
+      // variable cross-region latency — Prisma's 5s default interactive-transaction timeout was
+      // observed failing a real completion under e2e load with P2028 ("transaction not found",
+      // Neon having recycled the connection before the transaction finished). A slow-but-honest
+      // completion must not fail outright for someone who may be in crisis.
+      { timeout: 15_000, maxWait: 10_000 }
+    )
+  } catch (error) {
+    // [NFR4] Two concurrent completion requests for the same session can both pass the
+    // status === 'IN_PROGRESS' check above before either commits — confirmed happening for
+    // real, not theoretical (a genuine P2002 surfaced in production log output during this
+    // prompt's own verification pass). The loser's triageResult.create() fails on
+    // TriageResult.sessionId's unique constraint; rather than that surfacing to its caller as a
+    // generic 500, it re-reads the now-committed winner's result and returns the exact same
+    // successful response the "already completed" branch above returns — a race, resolved the
+    // same way a retry would have resolved it, without ever appearing as a failure.
+    if (isUniqueConstraintViolationOn(error, 'sessionId')) {
+      const completed = await loadSession(sessionId)
+      if (completed?.status === 'COMPLETED' && completed.triageResult) {
+        return buildCompletedResponse(completed as CompletedSession, start)
       }
-    },
-    // [NFR4] This transaction now does real work end to end (triage, an optional Escalation
-    // row, a resource query, and ranked ResourceRecommendation rows) against Neon's real,
-    // variable cross-region latency — Prisma's 5s default interactive-transaction timeout was
-    // observed failing a real completion under e2e load with P2028 ("transaction not found",
-    // Neon having recycled the connection before the transaction finished). A slow-but-honest
-    // completion must not fail outright for someone who may be in crisis.
-    { timeout: 15_000, maxWait: 10_000 }
-  )
+    }
+    throw error
+  }
+
+  const { triageResult, recommendedResources, escalation } = transactionResult
 
   // [FR7][R4] Every completion is audited — this also satisfies "any request touching a
   // CRISIS result writes an AuditLog entry" for this endpoint, since it logs unconditionally.
