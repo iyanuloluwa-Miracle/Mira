@@ -41,6 +41,9 @@ export default defineConfig({
   projects: [
     {
       name: 'mobile-360',
+      // Every other spec assumes the classifier behaves normally (the default mock mode) — see
+      // the 'classifier-degraded' project below, the only one that spec should ever run under.
+      testIgnore: /classifier-degraded\.spec\.ts$/,
       use: {
         viewport: { width: 360, height: 740 },
         userAgent: devices['Galaxy S8'].userAgent,
@@ -51,13 +54,48 @@ export default defineConfig({
     },
     {
       name: 'desktop',
+      testIgnore: /classifier-degraded\.spec\.ts$/,
       use: { ...devices['Desktop Chrome'] }
+    },
+    // [R7] A dedicated server + project, not a mode toggle inside the main suite: this is the
+    // only project running against a server that was booted with CLASSIFIER_MODE=http and an
+    // unreachable CLASSIFIER_SERVICE_URL, so screening.spec.ts's own "classifier offline" test
+    // is the only spec that should ever run against it (every other spec assumes the classifier
+    // behaves normally, matching the default mock mode) — see testMatch below.
+    {
+      name: 'classifier-degraded',
+      testMatch: /classifier-degraded\.spec\.ts$/,
+      use: {
+        baseURL: 'http://localhost:3071',
+        viewport: { width: 360, height: 740 },
+        userAgent: devices['Galaxy S8'].userAgent,
+        deviceScaleFactor: 2,
+        isMobile: true,
+        hasTouch: true
+      }
     }
   ],
-  webServer: {
-    command: 'npm run preview',
-    url: 'http://localhost:3000',
-    reuseExistingServer: !process.env.CI,
-    timeout: 120_000
-  }
+  webServer: [
+    {
+      command: 'npm run preview',
+      url: 'http://localhost:3000',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000
+    },
+    {
+      command: 'npm run preview -- --port 3071',
+      url: 'http://localhost:3071',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+      env: {
+        PORT: '3071',
+        CLASSIFIER_MODE: 'http',
+        // Deliberately unreachable (port 9 is a reserved/discard port, nothing ever listens
+        // there) — a short timeout keeps the "offline" test itself fast rather than waiting out
+        // CLASSIFIER_TIMEOUT_MS's own default.
+        CLASSIFIER_SERVICE_URL: 'http://127.0.0.1:9',
+        CLASSIFIER_TIMEOUT_MS: '500'
+      }
+    }
+  ]
 })

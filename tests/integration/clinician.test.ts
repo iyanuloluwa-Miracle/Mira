@@ -1,4 +1,4 @@
-// Integration coverage for FR6/FR7 (escalation and the clinician dashboard) — against a real
+// [FR6][FR7][NFR1] Integration coverage for escalation and the clinician dashboard — against a real
 // built server and a real (if ephemeral) Postgres. Covers exactly what the prompt's acceptance
 // criteria ask for: role separation (a user session cannot reach /api/clinician and a clinician
 // session cannot reach /api/screening), consent-gated visibility (both escalation-record

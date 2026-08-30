@@ -1,4 +1,4 @@
-// Integration coverage for prompt 14 (FR5): the resource library API and its wiring into
+// [FR5] Integration coverage for prompt 14: the resource library API and its wiring into
 // screening completion — against a real built server and a real (if ephemeral) Postgres. The
 // ephemeral DB starts empty (prisma/seed.ts is not run automatically for it), so this file
 // inserts its own small Resource fixture set directly via Prisma, the same pattern other

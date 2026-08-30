@@ -1,4 +1,4 @@
-// Integration coverage for prompt 4 (FR1 + consent layer), against a real built server and a
+// [FR1][NFR1] Integration coverage for prompt 4 (auth + consent layer), against a real built server and a
 // real (if ephemeral) Postgres — see tests/integration/helpers/test-server.ts for why.
 //
 // "Screening is reachable without registration" is tested at the boundary this prompt actually

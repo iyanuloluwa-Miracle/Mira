@@ -269,6 +269,9 @@ useHead({ title: 'Your result' })
       >
         Done
       </NuxtLink>
+      <NuxtLink to="/history" class="text-center text-sm text-indigo-700 underline">
+        View past check-ins
+      </NuxtLink>
     </div>
   </main>
 </template>
