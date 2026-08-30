@@ -1,4 +1,4 @@
-// [FR1] Runs on the default 'mobile-360' project (playwright.config.ts). /login and /register
+// [FR1][FR4] Runs on the default 'mobile-360' project (playwright.config.ts). /login and /register
 // previously had no link to each other — someone landing on /login with no account had no way
 // forward through the UI at all, even though server/api/auth/register.post.ts has always
 // supported a cold registration with no prior session. This covers the cross-link and the real

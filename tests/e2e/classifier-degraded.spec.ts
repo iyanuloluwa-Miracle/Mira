@@ -1,4 +1,4 @@
-// [R7] Runs only on the 'classifier-degraded' project (playwright.config.ts), against a
+// [FR3][NFR4][R7] Runs only on the 'classifier-degraded' project (playwright.config.ts), against a
 // dedicated server booted with CLASSIFIER_MODE=http and an unreachable CLASSIFIER_SERVICE_URL —
 // no other spec should ever run against this server, since every other spec assumes the
 // classifier behaves normally (the default mock mode). Proves the rule R7 claim end to end, in

@@ -1,4 +1,4 @@
-// Integration coverage for the global error handler (server/error.ts, registered via
+// [NFR1] Integration coverage for the global error handler (server/error.ts, registered via
 // nitro.errorHandler in nuxt.config.ts) — against a real built server, proving the wiring itself
 // works, not just the handler's own logic in isolation (server/error.test.ts covers that,
 // including the generic-500-flattening branch this file can't easily trigger through the public

@@ -1,4 +1,4 @@
-// Integration coverage for two routes an API-route audit found with zero coverage anywhere in
+// [FR2][FR7] Integration coverage for two routes an API-route audit found with zero coverage anywhere in
 // this suite: GET /api/instruments/[code] (FR2 — instrument item text/response options) and
 // POST /api/clinician/logout (FR7 — the clinician-realm counterpart to /api/auth/logout,
 // already covered). Against a real built server and a real (if ephemeral) Postgres, same as
