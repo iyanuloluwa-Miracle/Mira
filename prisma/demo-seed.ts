@@ -29,6 +29,7 @@ import {
 import { scoreGad7, scorePhq9 } from '../server/domain/scoring'
 import { computeTriage } from '../server/domain/triage'
 import { HUMAN_REVIEW_CONSENT_VERSION } from '../server/domain/consent'
+import { DEMO_IDS } from './demo-seed-ids'
 
 const prisma = new PrismaClient()
 
@@ -231,11 +232,10 @@ async function main(): Promise<void> {
   console.log('Seeded scenario 2: moderate session (demo-moderate)')
 
   // Scenario 3: high-risk, escalated — phq9 total 24 is above the HIGH threshold (>=20).
-  const highUserId = '33333333-3333-4333-8333-333333333331'
   const { escalate: highEscalate } = await seedAnsweredSession('demo-high-escalated', {
-    userId: highUserId,
-    sessionId: '33333333-3333-4333-8333-333333333332',
-    triageResultId: '33333333-3333-4333-8333-333333333333',
+    userId: DEMO_IDS.highEscalated.userId,
+    sessionId: DEMO_IDS.highEscalated.sessionId,
+    triageResultId: DEMO_IDS.highEscalated.triageResultId,
     phq9Values: [3, 3, 3, 3, 3, 3, 3, 3, 0],
     gad7Values: [2, 2, 2, 2, 2, 2, 2],
     startedAt: daysAgo(1),
@@ -243,10 +243,10 @@ async function main(): Promise<void> {
       'Synthetic demo response for MVP1 evaluation only: I feel exhausted and overwhelmed most days.'
   })
   if (!highEscalate) throw new Error('Expected scenario 3 to be escalate-worthy (HIGH).')
-  await grantHumanReviewConsent(highUserId, daysAgo(1))
+  await grantHumanReviewConsent(DEMO_IDS.highEscalated.userId, daysAgo(1))
   await seedEscalation(
-    '33333333-3333-4333-8333-333333333334',
-    '33333333-3333-4333-8333-333333333333',
+    DEMO_IDS.highEscalated.escalationId,
+    DEMO_IDS.highEscalated.triageResultId,
     'PENDING',
     daysAgo(1)
   )
@@ -254,20 +254,19 @@ async function main(): Promise<void> {
 
   // Scenario 4: PHQ-9 item 9 above zero forces CRISIS unconditionally (rule R2), regardless of
   // the other item values chosen here.
-  const crisisUserId = '44444444-4444-4444-8444-444444444441'
   const { riskLevel: crisisRisk } = await seedAnsweredSession('demo-crisis', {
-    userId: crisisUserId,
-    sessionId: '44444444-4444-4444-8444-444444444442',
-    triageResultId: '44444444-4444-4444-8444-444444444443',
+    userId: DEMO_IDS.crisis.userId,
+    sessionId: DEMO_IDS.crisis.sessionId,
+    triageResultId: DEMO_IDS.crisis.triageResultId,
     phq9Values: [2, 2, 2, 2, 2, 2, 2, 2, 2],
     gad7Values: [1, 1, 1, 1, 1, 1, 1],
     startedAt: daysAgo(0)
   })
   if (crisisRisk !== 'CRISIS') throw new Error('Expected scenario 4 to be CRISIS.')
-  await grantHumanReviewConsent(crisisUserId, daysAgo(0))
+  await grantHumanReviewConsent(DEMO_IDS.crisis.userId, daysAgo(0))
   await seedEscalation(
-    '44444444-4444-4444-8444-444444444444',
-    '44444444-4444-4444-8444-444444444443',
+    DEMO_IDS.crisis.escalationId,
+    DEMO_IDS.crisis.triageResultId,
     'PENDING',
     daysAgo(0)
   )
@@ -275,19 +274,18 @@ async function main(): Promise<void> {
 
   // Scenario 5: a second HIGH escalation, already reviewed — gives the clinician queue and
   // detail view a real status mix (PENDING x2, ACKNOWLEDGED x1) rather than one flat list.
-  const reviewedUserId = '55555555-5555-4555-8555-555555555551'
   await seedAnsweredSession('demo-high-reviewed', {
-    userId: reviewedUserId,
-    sessionId: '55555555-5555-4555-8555-555555555552',
-    triageResultId: '55555555-5555-4555-8555-555555555553',
+    userId: DEMO_IDS.highReviewed.userId,
+    sessionId: DEMO_IDS.highReviewed.sessionId,
+    triageResultId: DEMO_IDS.highReviewed.triageResultId,
     phq9Values: [3, 3, 3, 3, 3, 2, 2, 2, 0],
     gad7Values: [2, 2, 2, 1, 1, 1, 1],
     startedAt: daysAgo(3)
   })
-  await grantHumanReviewConsent(reviewedUserId, daysAgo(3))
+  await grantHumanReviewConsent(DEMO_IDS.highReviewed.userId, daysAgo(3))
   await seedEscalation(
-    '55555555-5555-4555-8555-555555555554',
-    '55555555-5555-4555-8555-555555555553',
+    DEMO_IDS.highReviewed.escalationId,
+    DEMO_IDS.highReviewed.triageResultId,
     'ACKNOWLEDGED',
     daysAgo(3),
     adminClinician.id
