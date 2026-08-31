@@ -30,7 +30,7 @@
     "setup": "tsx scripts/setup.ts",
     "classifier": "tsx scripts/run-classifier.ts",
     "dev:all": "concurrently -n nuxt,classifier -c blue,green \"npm run dev\" \"npm run classifier\"",
-    "demo": "prisma migrate reset --force --skip-seed && tsx prisma/demo-seed.ts && npm run dev:all"
+    "demo": "prisma migrate reset --force && tsx prisma/demo-seed.ts && npm run dev:all"
   },
   "dependencies": {
     "@prisma/client": "^6.3.1",
