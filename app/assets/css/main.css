@@ -13,7 +13,7 @@ body {
 /* [Accessibility] A visible focus ring everywhere, not just where the browser default happens
    to show one — required for anyone navigating by keyboard or switch device. */
 :focus-visible {
-  outline: 3px solid var(--color-indigo-600, #4f46e5);
+  outline: 3px solid var(--color-teal-700, #0f766e);
   outline-offset: 2px;
 }
 

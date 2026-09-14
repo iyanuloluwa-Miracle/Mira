@@ -30,8 +30,8 @@ const emit = defineEmits<{
         class="flex min-h-[44px] cursor-pointer items-center gap-3 rounded-lg border-2 px-4 py-3 text-base"
         :class="
           modelValue === option.value
-            ? 'border-indigo-600 bg-indigo-50'
-            : 'border-slate-200 bg-white hover:border-slate-400'
+            ? 'border-teal-700 bg-teal-50'
+            : 'border-slate-200 bg-white/80 hover:border-teal-600/50'
         "
       >
         <input
@@ -39,7 +39,7 @@ const emit = defineEmits<{
           :name="`item-${itemCode}`"
           :value="option.value"
           :checked="modelValue === option.value"
-          class="h-5 w-5 shrink-0 accent-indigo-600"
+          class="h-5 w-5 shrink-0 accent-teal-700"
           @change="emit('update:modelValue', option.value)"
         />
         <span class="text-slate-900">{{ option.label }}</span>

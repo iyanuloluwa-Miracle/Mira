@@ -29,7 +29,7 @@ const widthClass = computed(() => useWidthClass(percentage.value))
       :aria-label="announcement"
     >
       <div
-        :class="['h-full rounded-full bg-indigo-600 transition-[width] duration-300', widthClass]"
+        :class="['h-full rounded-full bg-teal-700 transition-[width] duration-300', widthClass]"
       />
     </div>
     <p class="mt-2 text-sm text-slate-600" aria-live="polite" aria-atomic="true">
