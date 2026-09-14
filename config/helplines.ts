@@ -1,11 +1,12 @@
 // Human-support contact information shown to users after escalation and on the crisis screen
 // (server/domain/safety.ts).
 //
-// PLACEHOLDER VALUES ONLY. Every entry below is marked TODO_VERIFY and must not be treated as
-// real, dialable, or currently staffed — no real helpline number may be committed before a
-// human has personally verified it (rule R10). A wrong number on a crisis screen is the single
-// worst failure this system can have; do not fill these in from memory, a search result, or a
-// model — verify directly with the organisation and record the verification date.
+// DEMO PLACEHOLDERS ONLY. These entries are shaped like real contacts for UI/demo purposes,
+// but every phone value is deliberately non-dialable fiction and verified remains false.
+// No real helpline number may be committed before a human has personally verified it with the
+// organisation and recorded the verification date (rule R10). A wrong number on a crisis
+// screen is the single worst failure this system can have — do not replace these with numbers
+// from memory, a search result, or a model.
 // Changes require clinical review — see CONTRIBUTING.md.
 
 export interface HelplineContact {
@@ -18,24 +19,27 @@ export interface HelplineContact {
 
 export const HELPLINES: HelplineContact[] = [
   {
-    name: 'TODO_VERIFY: National suicide/crisis prevention helpline',
-    phone: 'TODO_VERIFY',
-    description: 'TODO_VERIFY — confirm scope, catchment area, and current operating status.',
-    availability: 'TODO_VERIFY',
+    name: '[Demo] National suicide/crisis prevention helpline',
+    phone: '0000 000 0001',
+    description:
+      'Demo placeholder for a national crisis line. Not a real organisation or dialable number.',
+    availability: 'Demo only — shown as 24/7',
     verified: false
   },
   {
-    name: 'TODO_VERIFY: Emergency services',
-    phone: 'TODO_VERIFY',
-    description: 'TODO_VERIFY',
-    availability: 'TODO_VERIFY',
+    name: '[Demo] Emergency services',
+    phone: '0000 000 0002',
+    description:
+      'Demo placeholder for emergency services. Not a real or dialable emergency number.',
+    availability: 'Demo only — shown as 24/7',
     verified: false
   },
   {
-    name: 'TODO_VERIFY: Local mental health crisis line',
-    phone: 'TODO_VERIFY',
-    description: 'TODO_VERIFY',
-    availability: 'TODO_VERIFY',
+    name: '[Demo] Local mental health crisis line',
+    phone: '0000 000 0003',
+    description:
+      'Demo placeholder for a local crisis line. Not a real organisation or dialable number.',
+    availability: 'Demo only — shown as daytime hours',
     verified: false
   }
 ]

@@ -152,7 +152,7 @@ useHead({ title: CHAT_HEADER_TITLE })
        the one screen with a fixed input bar that must stay clear of an on-screen keyboard, and
        dvh is the unit that actually shrinks with the visual viewport when a keyboard opens on
        Android Chrome, where min-h-svh would not. -->
-  <main class="mx-auto flex h-dvh max-w-md flex-col overflow-hidden bg-white">
+  <main class="mira-atmosphere mx-auto flex h-dvh max-w-md flex-col overflow-hidden">
     <header class="shrink-0 border-b border-slate-200 px-4 py-3">
       <div class="flex items-center justify-between gap-2">
         <h1 class="text-base font-semibold text-slate-900">{{ CHAT_HEADER_TITLE }}</h1>

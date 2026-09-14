@@ -143,7 +143,7 @@ async function handleSkipFreeText() {
 </script>
 
 <template>
-  <main class="screen-page">
+  <main class="screen-page mira-atmosphere">
     <SafetyExitButton />
 
     <div class="screen-page__inner">
@@ -252,25 +252,8 @@ async function handleSkipFreeText() {
 
 <style scoped>
 .screen-page {
-  position: relative;
-  isolation: isolate;
   min-height: 100svh;
   overflow: hidden;
-  background:
-    radial-gradient(90% 60% at 85% 0%, rgba(158, 201, 196, 0.45) 0%, transparent 55%),
-    radial-gradient(70% 50% at 10% 80%, rgba(120, 168, 180, 0.28) 0%, transparent 50%),
-    linear-gradient(168deg, #eef5f3 0%, #d8e8e4 55%, #c5d9d4 100%);
-}
-
-.screen-page::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  z-index: -1;
-  opacity: 0.22;
-  pointer-events: none;
-  mix-blend-mode: multiply;
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
 }
 
 .screen-page__inner {
