@@ -38,6 +38,7 @@ import {
   TEXT_ANALYSIS_TEXT_FREE_MESSAGE,
   TEXT_ANALYSIS_UNAVAILABLE_MESSAGE
 } from '~/content/copy/postScreening'
+import { CHAT_HEADER_TITLE } from '~/content/copy/conversation'
 
 const route = useRoute()
 const sessionId = route.params.sessionId as string
@@ -114,12 +115,12 @@ useHead({ title: 'Your result' })
 
       <div v-else-if="loadError" class="mt-10 text-center">
         <p class="text-base text-slate-900">{{ loadError }}</p>
-        <NuxtLink to="/" class="mt-4 inline-block text-indigo-700 underline">Back to Mira</NuxtLink>
+        <NuxtLink to="/" class="mt-4 inline-block text-teal-800 underline">Back to Mira</NuxtLink>
       </div>
 
       <div v-else-if="deleted" class="mt-10 flex flex-col gap-4 text-center">
         <p class="text-base text-slate-900">{{ DELETE_SESSION_SUCCESS_MESSAGE }}</p>
-        <NuxtLink to="/" class="text-indigo-700 underline">Back to Mira</NuxtLink>
+        <NuxtLink to="/" class="text-teal-800 underline">Back to Mira</NuxtLink>
       </div>
 
       <div v-else-if="showCrisis">
@@ -221,8 +222,15 @@ useHead({ title: 'Your result' })
           </ul>
           <p v-else class="mt-3 text-sm text-slate-700">{{ NEXT_STEPS_EMPTY_FALLBACK }}</p>
 
-          <NuxtLink to="/resources" class="mt-3 inline-block text-sm text-indigo-700 underline">
+          <NuxtLink to="/resources" class="mt-3 inline-block text-sm text-teal-800 underline">
             Browse the full resource library
+          </NuxtLink>
+
+          <NuxtLink
+            :to="`/support/${sessionId}`"
+            class="mt-4 flex min-h-[44px] items-center justify-center rounded-lg border border-teal-900/20 bg-teal-900/[0.06] px-4 py-3 text-base font-semibold text-teal-950 hover:bg-teal-900/10"
+          >
+            {{ CHAT_HEADER_TITLE }}
           </NuxtLink>
         </section>
 
@@ -266,11 +274,11 @@ useHead({ title: 'Your result' })
 
         <NuxtLink
           to="/"
-          class="min-h-[44px] rounded-lg bg-indigo-600 px-6 py-3 text-center text-base font-semibold text-white hover:bg-indigo-700"
+          class="min-h-[44px] rounded-lg bg-teal-700 px-6 py-3 text-center text-base font-semibold text-white hover:bg-teal-800"
         >
           Done
         </NuxtLink>
-        <NuxtLink to="/history" class="text-center text-sm text-indigo-700 underline">
+        <NuxtLink to="/history" class="text-center text-sm text-teal-800 underline">
           View past check-ins
         </NuxtLink>
       </div>

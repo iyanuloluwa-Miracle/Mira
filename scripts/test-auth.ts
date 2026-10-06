@@ -5,6 +5,8 @@
  * Reads APP_BASE_URL from the environment (.env via the shell, or default localhost:3000).
  * Uses a disposable @example.com address — no real inbox.
  */
+export {}
+
 const baseUrl = (process.env.APP_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '')
 
 function extractSetCookies(response: Response): string[] {

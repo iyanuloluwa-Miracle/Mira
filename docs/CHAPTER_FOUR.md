@@ -1,77 +1,134 @@
-> **Superseded by [`docs/CHAPTER_FOUR.md`](CHAPTER_FOUR.md).** This file is preserved as the raw,
-> frozen draft this generation was built from. `CHAPTER_FOUR.md` is the submission-formatted
-> version — same figures, reformatted to the thesis's section/table/figure numbering conventions
-> plus explicit figure placeholders — and is the one to read, cite, or edit going forward.
->
-> **Generation record.** Drafted 2026-08-30 against commit `3c979e6557cee5890a4f8a0b21fb4230dc5a89a2`
-> (branch `dev`, working tree clean at generation time). Every figure in this chapter was produced by
-> one of the following commands, run against that commit in this order:
+# CHAPTER FOUR
+
+## SYSTEM IMPLEMENTATION, EXPERIMENTATION, RESULTS AND DISCUSSION
+
+> **Generation record.** This chapter is derived from `docs/chapter-four-draft.md`, which was
+> drafted 2026-08-30 against commit `3c979e6557cee5890a4f8a0b21fb4230dc5a89a2` (branch `dev`,
+> working tree clean at generation time) by running the commands listed below, in order, against
+> that commit. It was reformatted into this file on 2026-08-31 against the current `dev` HEAD,
+> commit `70be900`. Between those two commits, `git diff --stat 3c979e6 HEAD` shows changes only
+> to Docker removal, local-setup documentation, the demo seed script, the evidence-capture script,
+> and setup tooling (`README.md`, `docs/local-setup.md`, `prisma/demo-seed.ts`,
+> `scripts/capture-evidence.ts`, `scripts/setup.ts`, and related files) — **no file under
+> `server/domain/`, `server/api/`, `server/services/`, `app/`, or `tests/` changed**. Every test
+> count, coverage figure, and requirement-verification result below therefore still describes the
+> code at current HEAD accurately; only the [DATA REQUIRED] items (screenshots, classifier
+> training results, usability data) remain genuinely unproduced, confirmed by inspection of
+> `docs/screenshots/` (contains only `README.md`) and the absence of `FIGURES.md` or a
+> `data/evaluation-export/` directory in the repository as of this writing. Figures were produced
+> by, in order:
 >
 > - `npm run test:coverage` (`vitest run --coverage server app tests/unit` +
 >   `tsx scripts/check-coverage-thresholds.ts`) — unit test counts, pass/fail, and per-file
 >   coverage for `server/domain` and `server/utils`.
 > - `npm run test:integration` (`vitest run tests/integration --pool=threads
 --poolOptions.threads.singleThread`) — integration test counts and pass/fail.
-> - `npx playwright test` — full end-to-end suite, run three times. The first two are discarded
->   as confounded (a concurrent manual database query, then an inherited rate-limit budget from a
->   reused server process); the third, run with `CI=1` to force a genuinely fresh server and no
->   concurrent activity, is what §4.5.3 reports (29 passed / 37 failed / 9 flaky of 75). See
->   §4.5.3 for the full account and root-cause evidence.
+> - `npx playwright test` — full end-to-end suite, run three times; the first two discarded as
+>   confounded, the third (`CI=1`, no concurrent database activity) reported in §4.5.3.
 > - A direct `SELECT ... percentile_cont(...) FROM metrics GROUP BY name` / `GROUP BY "riskLevel"`
->   query against the project's Neon Postgres database (the same query `GET /api/admin/metrics`
->   runs, executed here via `npx tsx` against `server/utils/db.ts`'s connection) — §4.7's latency
->   and triage-distribution figures.
-> - `npm run traceability` was **not** re-run for this draft; §4.4's table is read directly from
->   the already-committed `docs/traceability-matrix.md`, generated 2026-08-30T15:13:24.970Z by
->   that script against a full unit+integration+e2e run, and is quoted verbatim.
+>   query against the project's development Postgres database — §4.7's latency and
+>   triage-distribution figures.
+> - `docs/traceability-matrix.md`, generated 2026-08-30T15:13:24.970Z by
+>   `scripts/generate-traceability.ts` (never hand-edited) from `// [FR#]` / `// [NFR#]` tags plus
+>   a full unit+integration+e2e run, quoted verbatim in §4.4.
 > - Reading of `docs/architecture.md`, `docs/decisions/0001-rule-based-triage.md`,
 >   `docs/llm-safety-tests.md`, `docs/frontend-metrics.md`, `docs/ndpa-mapping.md`,
->   `docs/security-controls.md`, `docs/privacy-controls.md`, `docs/evaluation-data-dictionary.md`,
->   `CONTRIBUTING.md`, `coverage-thresholds.json`, and the source files cited inline.
+>   `docs/security-controls.md`, `docs/privacy-controls.md`,
+>   `docs/evaluation-data-dictionary.md`, `docs/local-setup.md`, `CONTRIBUTING.md`,
+>   `coverage-thresholds.json`, `package.json`, and the source files cited inline.
 >
-> If further prompts are implemented after this date, re-run these commands and regenerate — the
-> figures below are frozen to the commit named above, not to "the current state of the repository."
+> If further prompts are implemented after commit `70be900`, re-run these commands and regenerate
+> before citing this chapter's figures — they are frozen to the commits named above, not to
+> "the current state of the repository" at the time of reading.
 
-# Chapter Four: Implementation and Evaluation
-
-## 4.1 Introduction
+### 4.1 Introduction
 
 This chapter presents what was actually built and measured for the MVP1 implementation of Mira,
-the screening and decision-support system specified in Chapter Three. It is organised around the
-same five-component architecture used throughout this thesis — the screening engine, the triage
-and safety-routing engine, the NLP classifier integration, the bounded conversational layer, and
-the clinician review interface — together with the cross-cutting evidence a thesis examiner would
-expect: requirement-by-requirement verification, functional test results, an adversarial
-evaluation of the conversational layer's safety guardrails, performance measurements, and a
-privacy and security assessment against the Nigeria Data Protection Act 2023.
+the privacy-preserving mental health screening, triage, and psychoeducational support system
+specified in Chapter Three. It is organised around the same five-component architecture used
+throughout this thesis — the screening engine, the triage and safety-routing engine, the NLP
+classifier integration, the bounded conversational layer, and the clinician review interface —
+together with the cross-cutting evidence a thesis examiner would expect: a description of the
+development environment, requirement-by-requirement verification, functional test results, an
+adversarial evaluation of the conversational layer's safety guardrails, performance measurements,
+and a privacy and security assessment against the Nigeria Data Protection Act 2023.
 
 The chapter's single governing rule is traceability: every number, claim, and figure reported
-here is derived from something in the project repository at the commit named above — a test run,
-a coverage report, a database query, a source file, or a generated document — and never from an
-illustrative estimate. Three categories of result named in the original evaluation plan — the
-trained NLP classifier's accuracy metrics (§4.9), the post-use usability questionnaire (§4.10),
-and screen captures of the interface (§4.3) — had not yet been produced at the time of writing.
-Rather than omit them or fill them with placeholder numbers, this chapter builds out the
-structure each will occupy and marks the missing content explicitly with **[DATA REQUIRED]**,
-consolidated into a single checklist in the closing section. Sections 4.2–4.8 report on work that
-has actually been completed and verified against this commit.
+here is derived from something in the project repository — a test run, a coverage report, a
+database query, a source file, or a generated document — and never from an illustrative estimate.
+Three categories of result named in the original evaluation plan — the trained NLP classifier's
+accuracy metrics (§4.9), the post-use usability questionnaire (§4.10), and screen captures of the
+interface (§4.3) — had not yet been produced at the time of writing. Rather than omit them or
+fill them with placeholder numbers, this chapter builds out the structure each will occupy and
+marks the missing content explicitly with **[DATA REQUIRED]**, consolidated into a single
+checklist in §4.14. Sections 4.2–4.8 report on work that has actually been completed and verified.
 
-## 4.2 System implementation
+### 4.2 System Implementation
+
+#### 4.2.1 Development Environment
+
+The prototype is implemented as a native (non-containerised) Node.js application, a deliberate
+departure from an earlier Docker-based setup (removed in favour of three Docker-free local
+Postgres routes documented in `docs/local-setup.md`: a hosted Neon serverless instance, a
+zero-install embedded PGlite database via `npm run db:local`, or a locally installed Postgres
+server). The stack, read directly from `package.json`, is:
+
+**Table 4.1: Development stack**
+
+| Layer                 | Technology                             | Version   | Role                                                                 |
+| --------------------- | -------------------------------------- | --------- | -------------------------------------------------------------------- |
+| Runtime               | Node.js                                | ≥ 20      | Server and build runtime (`package.json` `engines`)                  |
+| Language              | TypeScript                             | 5.7       | Used throughout `app/`, `server/`, `scripts/`, `tests/`              |
+| Web framework         | Nuxt                                   | 4.5       | Client (`app/`) and server route layer (Nitro, `server/api/`)        |
+| UI framework          | Vue                                    | 3.5       | Component layer                                                      |
+| Styling               | Tailwind CSS                           | 4.3       | Utility-first styling for the mobile-first UI                        |
+| Input validation      | zod                                    | 3.24      | Schema validation on every server route (rule R8)                    |
+| ORM / database access | Prisma                                 | 6.3       | Schema, migrations, and query layer over PostgreSQL                  |
+| Unit/integration test | Vitest                                 | 3.0       | `server/domain`, `server/utils`, `tests/integration`                 |
+| End-to-end test       | Playwright                             | 1.49      | Browser-driven scenarios at a 360px mobile viewport                  |
+| Classifier service    | Python, FastAPI, PyTorch, Transformers | see below | Standalone out-of-process NLP service (`services/classifier/`)       |
+| LLM integration       | Raw HTTPS calls (`fetch`)              | n/a       | Direct calls to the Anthropic Messages API; no vendor SDK dependency |
+
+The classifier service (`services/classifier/`) pins `torch>=2.4,<3.0`, `transformers>=4.44,<5.0`,
+`fastapi>=0.115,<1.0`, and `pydantic>=2.9,<3.0` in `services/classifier/requirements.txt`, ahead of
+the trained-model swap described in §4.2.5 and §4.9, so that the service's dependency footprint
+does not change when a trained model lands. The conversational layer's real LLM client
+(`server/services/conversation/anthropic-client.ts`) calls
+`https://api.anthropic.com/v1/messages` directly with the fetch API rather than depending on the
+`@anthropic-ai/sdk` package, which is not a project dependency; a mock client
+(`mock-client.ts`) is used by default and throughout the automated test suites (§4.5, §4.7.1).
+
+Version control uses git with Conventional Commits, enforced by `commitlint.config.mjs` at commit
+time. No container runtime (Docker/Compose) is required to run any part of the system as of this
+commit; `docs/local-setup.md` documents the plain `npm install` / `npm run setup` / `npm run
+dev:all` path used throughout this chapter's evaluation.
+
+#### 4.2.2 System Architecture Implementation
 
 The realised system follows the layered architecture set out in `docs/architecture.md`: a Nuxt 4
 client (`app/`) calling zod-validated Nitro API routes (`server/api/`), which in turn call into a
 dependency-free domain layer (`server/domain/`) for scoring, triage, and safety logic, and into a
-services layer (`server/services/`) for the only network I/O the application performs. This
-section describes what was implemented for each of the five components named in Chapter Three,
-naming the files that carry the corresponding `// [FR#]` / `// [NFR#]` requirement tags, and
-records the deviations from the original design that surfaced during implementation. Because the
-text of Chapter Three was not supplied as an input to this generation, the deviations below are
-drawn from the project's own architecture decision records and from direct inspection of the
-implementation rather than from a line-by-line diff against the design chapter; a final pass
-reconciling this section against the submitted Chapter Three text is recommended before
-submission.
+services layer (`server/services/`) for the only network I/O the application performs. Three
+units are separately deployable without a container runtime: the Nuxt app itself; the Python
+classifier service, which the app runs correctly without (rule R7, verified in §4.2.5); and
+PostgreSQL, accessed exclusively through Prisma. Security and privacy-by-design — encryption,
+input validation, and log redaction — are implemented as cross-cutting concerns rather than
+localised to one layer, consistent with `docs/architecture.md`'s layered diagram.
 
-### 4.2.1 Screening engine (component 1)
+This section describes what was implemented for each of the five components named in Chapter
+Three, naming the files that carry the corresponding `// [FR#]` / `// [NFR#]` requirement tags,
+and records the deviations from the original design that surfaced during implementation. Because
+the final submitted text of Chapter Three was not available to cross-check line by line during
+this generation, the deviations below are drawn from the project's own architecture decision
+records and from direct inspection of the implementation; a final reconciliation pass against the
+submitted Chapter Three text is recommended before submission.
+
+**Figure 4.1: Implemented System Architecture (layered view)**
+
+[INSERT A RENDERED VERSION OF THE LAYERED ARCHITECTURE DIAGRAM FROM `docs/architecture.md` HERE,
+ANNOTATED WITH THE THREE DEPLOYABLE UNITS DESCRIBED ABOVE]
+
+##### 4.2.2.1 Screening engine (component 1)
 
 The screening engine administers the PHQ-9 and GAD-7 instruments and scores them. The instrument
 item sets and scoring rules live in `server/domain/instruments/phq9.ts`,
@@ -85,7 +142,7 @@ return a total and a band, and they reject an incomplete or out-of-range submiss
 answer set. No deviation from the validated instruments was found in the implementing files: both
 instruments are administered with their full, unmodified item sets.
 
-### 4.2.2 Triage and safety-routing engine (component 2)
+##### 4.2.2.2 Triage and safety-routing engine (component 2)
 
 Risk banding and the crisis override are implemented as deterministic rule code in
 `server/domain/triage.ts` and `server/domain/safety.ts`, with no model or network dependency of
@@ -104,7 +161,7 @@ already resolved at the design stage rather than one discovered during implement
 learned rules+classifier scoring function was considered and rejected before any code was
 written, for the reason above.
 
-### 4.2.3 NLP classifier integration (component 3)
+##### 4.2.2.3 NLP classifier integration (component 3)
 
 The classifier is integrated as an out-of-process HTTP service with a defined contract
 (`server/domain/model-contract.ts`), documented in `services/classifier/README.md`. Two
@@ -134,7 +191,7 @@ against that contract regardless of which implementation sits behind it, so inte
 model when one is available is a matter of pointing `CLASSIFIER_SERVICE_URL` at it, not of
 re-architecting the integration.
 
-### 4.2.4 Bounded conversational layer (component 4)
+##### 4.2.2.4 Bounded conversational layer (component 4)
 
 The conversational layer is a server-mediated chat surface for psychoeducation and score
 explanation, reachable from `app/pages/support/[sessionId].vue` via
@@ -159,7 +216,7 @@ disclaimers, suggested prompts, and the safety-exit affordance — is implemente
 tests (`tests/e2e/conversation.spec.ts`, §4.5), so this is a structural deviation from the
 intended component decomposition, not a functional gap.
 
-### 4.2.5 Clinician review interface (component 5)
+##### 4.2.2.5 Clinician review interface (component 5)
 
 The clinician realm is implemented as a structurally separate authentication and session system
 end to end — `Clinician`/`ClinicianSession` tables, the `mira_clinician_session` cookie, and
@@ -183,31 +240,80 @@ scope decision, not an oversight: the `NotificationService` interface
 adapter can be substituted without changing any calling code, but no such adapter has been built.
 Discussed further as a limitation in §4.12.
 
-## 4.3 System interfaces
+### 4.3 System Interfaces
 
-Chapter Three's evaluation plan calls for one subsection per captured interface figure, drawn from
-`docs/screenshots/` and numbered per `FIGURES.md`. At the time of writing, `docs/screenshots/`
-contains only its own `README.md` (which documents the intended use of the directory — capturing
-evaluation evidence, with the standing rule that no image may contain real participant data per
-rule R10) and no image files, and no `FIGURES.md` exists anywhere in the repository to supply
-figure numbers or captions.
+Chapter Three's evaluation plan calls for one subsection per captured interface figure. At the
+time of writing, `docs/screenshots/` contains only its own `README.md` (which documents the
+intended use of the directory — capturing evaluation evidence, with the standing rule that no
+image may contain real participant data per rule R10) and no image files. `scripts/capture-evidence.ts`
+exists and is designed to produce exactly these captures at a 360×740 mobile viewport once `npm
+run demo` has seeded the deterministic demo data it depends on (a seeded clinician queue and
+escalations); it has not yet been run to completion. The figure placeholders below reserve the
+numbering and captions this section will use once that capture is run, drawn directly from the
+screenshot index in `docs/chapter-four-inputs.md`.
 
-> **[DATA REQUIRED]** Captured screenshots of each interface screen (landing/disclaimer, the
-> PHQ-9/GAD-7 question flow, the result page for a MINIMAL and a CRISIS outcome, the referral
-> screen, the conversational layer, the privacy dashboard, and the clinician queue and detail
-> view), each saved to `docs/screenshots/` and indexed with a figure number and caption in a new
-> `FIGURES.md` — this feeds the one-subsection-per-figure structure this section is meant to
-> contain. Until that exists, this section cannot honestly be expanded beyond a description of
-> which screens exist, which §4.2 above already provides by naming each page file.
+**Figure 4.2: Landing screen and disclaimer**
+[INSERT SCREENSHOT: `docs/screenshots/landing.png` — `/`, the disclaimer and "Start a private
+check" entry point]
 
-## 4.4 Requirements verification
+**Figure 4.3: Consent framing**
+[INSERT SCREENSHOT: `docs/screenshots/consent.png` — `/`; MVP1 has no separate consent step, the
+landing disclaimer is what is agreed to (see §4.12 Limitations)]
 
-The table below is reproduced from `docs/traceability-matrix.md`, generated by
+**Figure 4.4: PHQ-9/GAD-7 screening item**
+[INSERT SCREENSHOT: `docs/screenshots/question.png` — `/screen/[id]`, a single item mid-flow]
+
+**Figure 4.5: Screening result screen**
+[INSERT SCREENSHOT: `docs/screenshots/result.png` — `/result/[id]`, scores, risk band, and
+rationale]
+
+**Figure 4.6: Free-text explanation panel**
+[INSERT SCREENSHOT: `docs/screenshots/explanation.png` — `/result/[id]`, "What your written
+answer showed"]
+
+**Figure 4.7: Static crisis pathway**
+[INSERT SCREENSHOT: `docs/screenshots/crisis.png` — `/support/crisis`, clinician-reviewed,
+non-generated copy]
+
+**Figure 4.8: Bounded conversational layer**
+[INSERT SCREENSHOT: `docs/screenshots/chat.png` — `/support/[id]`, one exchange]
+
+**Figure 4.9: Psychoeducational resource library**
+[INSERT SCREENSHOT: `docs/screenshots/resources.png` — `/resources`]
+
+**Figure 4.10: Clinician escalation queue**
+[INSERT SCREENSHOT: `docs/screenshots/clinician-queue.png` — `/clinician`, logged in as the
+seeded admin]
+
+**Figure 4.11: Clinician escalation detail view**
+[INSERT SCREENSHOT: `docs/screenshots/clinician-detail.png` — `/clinician/escalations/[id]`, one
+seeded HIGH escalation]
+
+**Figure 4.12: Privacy dashboard**
+[INSERT SCREENSHOT: `docs/screenshots/privacy-dashboard.png` — `/privacy/my-data`, the seeded
+multi-session history user's data]
+
+**Figure 4.13: Admin metrics dashboard**
+[INSERT SCREENSHOT: `docs/screenshots/metrics.png` — `/admin/metrics`, latency and
+triage-distribution charts]
+
+> **[DATA REQUIRED]** Run `npm run demo` followed by `npm run capture-evidence` (or the direct
+> `scripts/capture-evidence.ts` invocation documented in `scripts/README.md`) to produce the
+> twelve images above, save them to `docs/screenshots/`, and replace each placeholder with the
+> actual image and a one-sentence caption confirmed against what is on screen. Until that exists,
+> this section cannot honestly be expanded beyond identifying which screens exist, which §4.2.2
+> above already does by naming each page file.
+
+### 4.4 Requirements Verification
+
+**Table 4.2** below is reproduced from `docs/traceability-matrix.md`, generated by
 `scripts/generate-traceability.ts` at 2026-08-30T15:13:24.970Z against a full run of the unit,
 integration, and end-to-end test suites — the script re-runs all three tiers itself and
 cross-references pass/fail against every `// [FR#]` / `// [NFR#]` tag in the codebase, so a status
 of PASS below reflects a real test result at generation time, not an assumption. It is quoted
 here, not hand-typed, per the instruction on that file's own first line never to hand-edit it.
+
+**Table 4.2: Requirements verification status**
 
 | Requirement | Description                                                                     | Status     |
 | ----------- | ------------------------------------------------------------------------------- | ---------- |
@@ -247,19 +353,22 @@ contract a trained model will — the requirement is about the integration behav
 it does, not about classification accuracy, which §4.9 addresses separately and honestly marks as
 not yet available.
 
-## 4.5 Functional testing
+### 4.5 Functional Testing
 
 Test counts and pass rates below were captured by running the suites directly against commit
-`3c979e6` rather than read from a prior CI record, so they are independent of the traceability
-matrix's own (slightly earlier, same-day) run.
+`3c979e6` (§4.2.1's diff confirms no test or application code changed between that commit and the
+current HEAD), rather than read from a prior CI record, so they are independent of the
+traceability matrix's own (slightly earlier, same-day) run.
 
-### 4.5.1 Unit tests and coverage
+#### 4.5.1 Unit tests and coverage
 
 `npm run test:coverage` (`vitest run --coverage server app tests/unit`): **24 test files, 342
 tests, 342 passed, 0 failed.** The coverage report (v8 provider) for the two directories the
 project's own coverage gate (`coverage-thresholds.json`, enforced by
 `scripts/check-coverage-thresholds.ts` at a 90% floor per file, not a directory-wide average) is
 run against:
+
+**Table 4.3: Unit test coverage by directory**
 
 | Directory                                           | Statements | Branches | Functions | Lines |
 | --------------------------------------------------- | ---------- | -------- | --------- | ----- |
@@ -300,10 +409,10 @@ tests) exercises this directly:
   object is not mutated — verifying the "deliberately zero imports" design claim in the file's own
   header comment has an observable, tested consequence.
 
-### 4.5.2 Integration tests
+#### 4.5.2 Integration tests
 
 `npm run test:integration` (`vitest run tests/integration --pool=threads
---poolOptions.threads.singleThread`, against the real Neon Postgres development database, not a
+--poolOptions.threads.singleThread`, against a real Postgres development database, not a
 mock): **11 test files, 149 tests, 149 passed, 0 failed**, completing in 152.1 seconds. This tier
 covers behaviour that requires a real running server and database and cannot be exercised by a
 pure-function unit test: the full screening happy path from start through history
@@ -314,17 +423,17 @@ abandoned sessions, and audit logs on their respective windows while leaving rec
 (`retention.test.ts`), and the security-header/CSRF/rate-limit behaviour of a real running server
 (`error-handling.test.ts`, `auth.test.ts`).
 
-### 4.5.3 End-to-end tests
+#### 4.5.3 End-to-end tests
 
 `npx playwright test` runs 75 browser-driven scenarios across three projects (`mobile-360`,
 `desktop`, and a single `classifier-degraded` project), listed via `npx playwright test --list`
-against the same commit. Three runs were made while producing this chapter, and the discarded
-first two are reported alongside the third because together they isolate the cause of the
-failures observed, rather than leaving an unexplained number in this chapter.
+against the same commit. Three runs were made while producing the underlying draft, and the
+discarded first two are reported alongside the third because together they isolate the cause of
+the failures observed, rather than leaving an unexplained number in this chapter.
 
 The first run overlapped, for several minutes, with a manual read-only database query executed
-against the same remote Neon compute for §4.7's latency figures (47 failures / 28 passes) and is
-discarded as confounded by that concurrent query. Before the second run, two `npm run preview`
+against the same remote database compute for §4.7's latency figures (47 failures / 28 passes) and
+is discarded as confounded by that concurrent query. Before the second run, two `npm run preview`
 server processes were found still listening from the first run — `playwright.config.ts`'s
 `reuseExistingServer: !process.env.CI` reuses an already-running server rather than starting a
 fresh one outside CI, which meant the second run inherited the first run's in-memory
@@ -341,32 +450,41 @@ still shows a high failure rate despite eliminating both confounds identified in
 runs. The webServer log for this run captured one explicit, unambiguous cause directly: a
 `PrismaClientKnownRequestError` on `POST /api/auth/anonymous-start` reading _"Can't reach database
 server at `ep-old-shape-axppp6gy.c-4.us-east-2.aws.neon.tech:5432`. Please make sure your database
-server is running..."_ — a real, transient failure to reach the project's remote Neon compute from
-this execution environment, not an application-level defect. Consistent with that cause, every one
-of the 113 timeout events recorded across all failed and flaky attempts (including retries) was
-the same assertion — `Expect "toHaveURL" with timeout 30000ms` — the browser waiting on a
-navigation that follows a server round trip (account creation, starting a screening, sending a
-conversation message), never a missing element, a wrong value, or any other assertion type. That
-uniformity across 37 distinct scenarios spanning nearly every spec file (auth, clinician,
-conversation, resources, screening, privacy, metrics) is evidence of a single shared cause —
-database round-trip latency or connectivity from this specific execution environment to the
-remote Neon compute exceeding Playwright's 30-second assertion timeout — rather than 37 unrelated
-application bugs. This reproduces, at a larger scale, the same class of issue
-`docs/frontend-metrics.md` already documents for this database (cold start measured directly at
-~2.6s, against which `playwright.config.ts`'s 15s default was originally tuned) and is reported
+server is running..."_ — a real, transient failure to reach the project's remote development
+database from this execution environment, not an application-level defect. Consistent with that
+cause, every one of the 113 timeout events recorded across all failed and flaky attempts
+(including retries) was the same assertion — `Expect "toHaveURL" with timeout 30000ms` — the
+browser waiting on a navigation that follows a server round trip (account creation, starting a
+screening, sending a conversation message), never a missing element, a wrong value, or any other
+assertion type. That uniformity across 37 distinct scenarios spanning nearly every spec file
+(auth, clinician, conversation, resources, screening, privacy, metrics) is evidence of a single
+shared cause — database round-trip latency or connectivity from this specific execution
+environment to the remote database compute exceeding Playwright's 30-second assertion timeout —
+rather than 37 unrelated application bugs. This reproduces, at a larger scale, the same class of
+issue `docs/frontend-metrics.md` already documents for this database (cold start measured directly
+at ~2.6s, against which `playwright.config.ts`'s 15s default was originally tuned) and is reported
 here as a genuine finding about the evaluation environment, discussed further in §4.11 and §4.12,
 rather than smoothed over or re-run indefinitely in search of a clean pass. It is also consistent
 with, though not fully explained by, the fact that the committed `docs/traceability-matrix.md`
 (§4.4) records a full-suite pass at generation time: that run's environment and network conditions
 were not captured by this chapter and cannot be reconstructed from the repository alone.
 
-## 4.6 Safety and guardrail evaluation
+**Table 4.4: Test suite summary**
+
+| Tier                      | Files | Tests | Passed | Failed | Flaky | Notes                                            |
+| ------------------------- | ----- | ----- | ------ | ------ | ----- | ------------------------------------------------ |
+| Unit (`vitest`)           | 24    | 342   | 342    | 0      | —     | 100% coverage of `server/domain`, `server/utils` |
+| Integration (`vitest`)    | 11    | 149   | 149    | 0      | —     | Against a real running server + database         |
+| End-to-end (`playwright`) | —     | 75    | 29     | 37     | 9     | Traced to remote-database connectivity, §4.5.3   |
+
+### 4.6 Safety and Guardrail Evaluation
 
 The adversarial test suite documented in `docs/llm-safety-tests.md` and implemented in
 `server/domain/conversation-safety.test.ts` was re-run as part of the unit suite in §4.5.1 (it is
 one of the 24 files, contributing 60 of the 342 unit tests) and passed in full: **60/60 tests
-passed, 0 failed.** Those 60 tests break down as: 3 basic-behaviour checks for `checkCrisisIndicators` (the
-pre-filter) and 2 for `checkOutputSafety` (the post-filter) — 5 tests total; one meta-assertion that the adversarial case list contains at least the 25 cases required;
+passed, 0 failed.** Those 60 tests break down as: 3 basic-behaviour checks for
+`checkCrisisIndicators` (the pre-filter) and 2 for `checkOutputSafety` (the post-filter) — 5 tests
+total; one meta-assertion that the adversarial case list contains at least the 25 cases required;
 **40 adversarial cases**, each run as an individual parameterised test against the specific filter
 and reason code it is expected to trigger; and a 14-case control group (8 legitimate user inputs
 that must not trigger the pre-filter, 6 legitimate model outputs that must not trigger the
@@ -375,6 +493,8 @@ trivially "pass" the 40 adversarial cases.
 
 The 40 adversarial cases are grouped into six categories, matching `docs/llm-safety-tests.md`'s
 own breakdown:
+
+**Table 4.5: Adversarial safety-test categories and results**
 
 | Category                                                                                                                                              | Cases | Caught by   | Result       |
 | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ----- | ----------- | ------------ |
@@ -408,17 +528,19 @@ matching the instruments themselves. None of these describe a phrasing within th
 slipping through — they describe the boundary of what deterministic pattern matching can do at
 all, which is a property of the approach, not a defect found in testing.
 
-## 4.7 Performance evaluation
+### 4.7 Performance Evaluation
 
-### 4.7.1 Latency
+#### 4.7.1 Latency
 
 Figures below were captured by querying the `metrics` table directly (the same `percentile_cont`
 query `GET /api/admin/metrics`, `server/api/admin/metrics.get.ts`, runs) against the project's
-Neon Postgres development database on 2026-08-30. **These rows are exclusively metrics recorded by
-the automated integration and end-to-end test suites executing against a remote development
+development Postgres database on 2026-08-30. **These rows are exclusively metrics recorded by the
+automated integration and end-to-end test suites executing against a remote development
 database** — `293` rows in total — not observations from real screening sessions under field
 conditions or a deployed instance; the metric names and what each one measures are defined in
 `docs/evaluation-data-dictionary.md`.
+
+**Table 4.6: Latency percentiles by metric (test-suite traffic, remote dev database)**
 
 | Metric name                    | Count | p50 (ms) | p95 (ms) | p99 (ms) | Min (ms) | Max (ms) |
 | ------------------------------ | ----- | -------- | -------- | -------- | -------- | -------- |
@@ -430,13 +552,13 @@ conditions or a deployed instance; the metric names and what each one measures a
 | `llm_turn_e2e_ms`              | 14    | 0        | 0        | 0        | 0        | 0        |
 
 The `_e2e_ms` figures for the classifier and LLM calls are near-zero because both are served, in
-this test environment, by the deterministic mock implementations described in §4.2.3 and §4.2.4
-(`CLASSIFIER_MODE`/LLM client defaults to the mock/in-process client for the automated suites),
-which have no real network round trip to measure; the corresponding `_server_ms` figures (1.1–9.1
-seconds) reflect real database round trips against the remote Neon instance from within the
-handler, which `docs/frontend-metrics.md` separately measured directly at approximately 2.6
-seconds cold and 275 milliseconds warm — consistent with the wide spread between this table's
-minimum and maximum values, which straddle Neon's compute-suspend/resume boundary.
+this test environment, by the deterministic mock implementations described in §4.2.2.3 and
+§4.2.2.4 (`CLASSIFIER_MODE`/LLM client defaults to the mock/in-process client for the automated
+suites), which have no real network round trip to measure; the corresponding `_server_ms` figures
+(1.1–9.1 seconds) reflect real database round trips against the remote development instance from
+within the handler, which `docs/frontend-metrics.md` separately measured directly at approximately
+2.6 seconds cold and 275 milliseconds warm — consistent with the wide spread between this table's
+minimum and maximum values, which straddle the database's compute-suspend/resume boundary.
 
 > **[DATA REQUIRED]** These figures characterise test-suite traffic against a shared development
 > database with variable cold-start latency, not NFR3 acceptance evidence under realistic field
@@ -446,10 +568,12 @@ minimum and maximum values, which straddle Neon's compute-suspend/resume boundar
 > produced by `scripts/export-evaluation-data.ts` once real or moderated-evaluation sessions exist
 > — is needed before these numbers can be cited as NFR3 evidence in the Discussion section.
 
-### 4.7.2 Triage distribution
+#### 4.7.2 Triage distribution
 
 From the same query, across every completed screening ever recorded against this development
 database (test-generated data, not representative of a real population's symptom distribution):
+
+**Table 4.7: Triage risk-level distribution (test/development database)**
 
 | Risk level | Count |
 | ---------- | ----- |
@@ -465,10 +589,12 @@ real-world prevalence, and is reported here only because it is what the Metric/T
 actually contain, per the instruction to read this section from real data rather than omit it
 silently.
 
-### 4.7.3 Frontend performance
+#### 4.7.3 Frontend performance
 
 Reproduced from `docs/frontend-metrics.md`, itself measured against a production build
 (`npm run build && node .output/server/index.mjs`), not the development server:
+
+**Table 4.8: Frontend performance and accessibility metrics**
 
 | Metric                            | Value      |
 | --------------------------------- | ---------- |
@@ -494,7 +620,7 @@ pairing in the screening UI against the WCAG 4.5:1 contrast minimum (nine pairs 
 passing with margin, computed directly from the Tailwind colour values in use via the relative-
 luminance formula).
 
-## 4.8 Privacy and security evaluation
+### 4.8 Privacy and Security Evaluation
 
 **Against Objective 5 (privacy-preserving design aligned to the NDPA 2023),**
 `docs/ndpa-mapping.md` maps every principle in NDPA 2023 s.24 (lawfulness/fairness/transparency,
@@ -548,95 +674,112 @@ found five advisories, all in transitive development-only dependencies of the Pr
 ESLint dev-tooling plugin, none reachable from the deployed server process — confirmed by tracing
 each to its actual dependency path rather than accepted on severity label alone.
 
-## 4.9 Classifier results
+### 4.9 Classifier Results
 
 > **[DATA REQUIRED]** This subsection reports results from a fine-tuned transformer classifier
-> trained on the DAIC-WOZ dataset in a separate Python training run, external to this repository.
-> That training has not yet been completed at the time of writing. **No number reported anywhere
-> in this chapter derives from a trained classifier.** Every classifier-related figure elsewhere
-> in this document (§4.2.3, §4.7.1's `classifier_call_*` rows) originates from one of two
-> non-clinical placeholders, each carrying an explicit version string that distinguishes it from a
-> real model's output: `server/services/classifier/mock-classifier.ts`, tagged
+> trained on the DAIC-WOZ dataset (§3.7) in a separate Python training run, external to this
+> repository. That training has not yet been completed at the time of writing. **No number
+> reported anywhere in this chapter derives from a trained classifier.** Every classifier-related
+> figure elsewhere in this document (§4.2.2.3, §4.7.1's `classifier_call_*` rows) originates from
+> one of two non-clinical placeholders, each carrying an explicit version string that distinguishes
+> it from a real model's output: `server/services/classifier/mock-classifier.ts`, tagged
 > `MOCK_MODEL_VERSION = "mock-0.1"`, and the standalone FastAPI scaffold at
 > `services/classifier/app/main.py`, tagged `MODEL_VERSION = "scaffold-placeholder-0.1"`. Both
 > implement the same deterministic heuristic — a hash of the input text plus a small illustrative
 > keyword lexicon — and neither should be read as evidence of classification accuracy in any
 > direction.
 >
-> The scaffold below reserves the structure this subsection will occupy once training completes:
->
-> **4.9.1 Training and evaluation setup** — dataset (DAIC-WOZ), split methodology, model
-> architecture, hyperparameters. [DATA REQUIRED — from the training repository.]
->
-> **4.9.2 Classification performance**
->
-> | Metric                  | Value           |
-> | ----------------------- | --------------- |
-> | Accuracy                | [DATA REQUIRED] |
-> | Precision (SYMPTOMATIC) | [DATA REQUIRED] |
-> | Recall (SYMPTOMATIC)    | [DATA REQUIRED] |
-> | F1 score                | [DATA REQUIRED] |
->
-> **4.9.3 Confusion matrix**
->
-> |                        | Predicted SYMPTOMATIC | Predicted NON_SYMPTOMATIC |
-> | ---------------------- | --------------------- | ------------------------- |
-> | Actual SYMPTOMATIC     | [DATA REQUIRED]       | [DATA REQUIRED]           |
-> | Actual NON_SYMPTOMATIC | [DATA REQUIRED]       | [DATA REQUIRED]           |
->
-> **4.9.4 Comparison against baseline** — the trained model's metrics against a stated baseline
-> (e.g. the majority-class classifier, or the deterministic heuristic in
-> `mock-classifier.ts`/`main.py` itself, which — since it is fully specified in this repository —
-> is a legitimate, reproducible baseline to compare against). [DATA REQUIRED]
+> The scaffold below reserves the structure this subsection will occupy once training completes.
 
-## 4.10 Usability evaluation
+#### 4.9.1 Training and evaluation setup
+
+Dataset (DAIC-WOZ), split methodology, model architecture, and hyperparameters.
+**[DATA REQUIRED — from the training repository.]**
+
+#### 4.9.2 Classification performance
+
+**Table 4.9: Classifier performance (pending)**
+
+| Metric                  | Value                |
+| ----------------------- | -------------------- |
+| Accuracy                | [PENDING EXPERIMENT] |
+| Precision (SYMPTOMATIC) | [PENDING EXPERIMENT] |
+| Recall (SYMPTOMATIC)    | [PENDING EXPERIMENT] |
+| F1 score                | [PENDING EXPERIMENT] |
+
+#### 4.9.3 Confusion matrix
+
+**Table 4.10: Classifier confusion matrix (pending)**
+
+|                        | Predicted SYMPTOMATIC | Predicted NON_SYMPTOMATIC |
+| ---------------------- | --------------------- | ------------------------- |
+| Actual SYMPTOMATIC     | [PENDING EXPERIMENT]  | [PENDING EXPERIMENT]      |
+| Actual NON_SYMPTOMATIC | [PENDING EXPERIMENT]  | [PENDING EXPERIMENT]      |
+
+#### 4.9.4 Comparison against baseline
+
+The trained model's metrics against a stated baseline — e.g. the majority-class classifier, or the
+deterministic heuristic in `mock-classifier.ts`/`main.py` itself, which, since it is fully
+specified in this repository, is a legitimate, reproducible baseline to compare against.
+**[PENDING EXPERIMENT]**
+
+### 4.10 Usability Evaluation
 
 > **[DATA REQUIRED]** This subsection reports results from Instrument B, the post-use evaluation
-> questionnaire administered to participants after a moderated screening session. No such session
-> has been run at the time of writing. The infrastructure this evaluation depends on does exist
-> and is described so the scaffold below is not speculative: `EVALUATION_MODE` (checked by
+> questionnaire administered to participants after a moderated screening session (§3.8.1). No such
+> session has been run at the time of writing. The infrastructure this evaluation depends on does
+> exist and is described so the scaffold below is not speculative: `EVALUATION_MODE` (checked by
 > `isEvaluationModeEnabled()`, `config/runtime.ts`) gates a researcher-facing start/stop control
 > (`app/pages/admin/evaluation.vue`) that records a consented `EvaluationSession` keyed to a
 > researcher-assigned `participantCode`, and `app/middleware/evaluation-tracking.global.ts` logs
 > `SCREEN_TRANSITION`, `BACK_NAVIGATION`, and `ERROR_ENCOUNTERED` events automatically during that
-> session — never free text or anything a participant typed, per `docs/evaluation-data-dictionary.md`.
-> `scripts/export-evaluation-data.ts` is the designated source for the behavioural measures below;
-> it writes `tasks.csv` (task-level start/end/completion) among its four de-identified exports.
->
-> **4.10.1 Participant demographics**
->
-> | Characteristic  | n   | %   |
-> | --------------- | --- | --- |
-> | [DATA REQUIRED] |     |     |
->
-> **4.10.2 System Usability Scale (SUS)**
->
-> Scoring procedure: the standard 10-item, 5-point Likert SUS instrument, scored per Brooke
-> (1996) — odd items scored (response − 1), even items scored (5 − response), summed and
-> multiplied by 2.5 for a 0–100 scale per participant. [CITATION REQUIRED — Brooke (1996) full
-> reference.]
->
-> | Participant     | SUS score |
-> | --------------- | --------- |
-> | [DATA REQUIRED] |           |
->
-> Mean SUS score: [DATA REQUIRED]. Interpretation against published SUS benchmarks: [CITATION
-> REQUIRED].
->
-> **4.10.3 Task completion rate and time on task**
->
-> Derived from `tasks.csv` (`scripts/export-evaluation-data.ts`): completion rate is the fraction
-> of task rows with `completed = true`; time on task is `duration_ms` per row, with the median
-> reported per `docs/evaluation-data-dictionary.md`'s stated definition.
->
-> | Task            | Completion rate | Median time (s) |
-> | --------------- | --------------- | --------------- |
-> | [DATA REQUIRED] |                 |                 |
->
-> **4.10.4 Qualitative response categories** — thematic categories from open-ended questionnaire
-> responses. [DATA REQUIRED]
+> session — never free text or anything a participant typed, per
+> `docs/evaluation-data-dictionary.md`. `scripts/export-evaluation-data.ts` is the designated
+> source for the behavioural measures below; it writes `tasks.csv` (task-level start/end/
+> completion) among its four de-identified exports.
 
-## 4.11 Discussion
+#### 4.10.1 Participant demographics
+
+**Table 4.11: Participant demographics (pending)**
+
+| Characteristic       | n   | %   |
+| -------------------- | --- | --- |
+| [PENDING EXPERIMENT] |     |     |
+
+#### 4.10.2 System Usability Scale (SUS)
+
+Scoring procedure: the standard 10-item, 5-point Likert SUS instrument, scored per Brooke
+(1996) — odd items scored (response − 1), even items scored (5 − response), summed and
+multiplied by 2.5 for a 0–100 scale per participant. **[REFERENCE REQUIRED — Brooke (1996) full
+citation; cited in Chapter Three §3.8.1 and §3.8.3 but not present in the Chapter Two reference
+list supplied for this generation.]**
+
+**Table 4.12: SUS scores per participant (pending)**
+
+| Participant          | SUS score |
+| -------------------- | --------- |
+| [PENDING EXPERIMENT] |           |
+
+Mean SUS score: **[PENDING EXPERIMENT]**. Interpretation against published SUS benchmarks:
+**[REFERENCE REQUIRED]**.
+
+#### 4.10.3 Task completion rate and time on task
+
+Derived from `tasks.csv` (`scripts/export-evaluation-data.ts`): completion rate is the fraction
+of task rows with `completed = true`; time on task is `duration_ms` per row, with the median
+reported per `docs/evaluation-data-dictionary.md`'s stated definition.
+
+**Table 4.13: Task completion rate and time on task (pending)**
+
+| Task                 | Completion rate | Median time (s) |
+| -------------------- | --------------- | --------------- |
+| [PENDING EXPERIMENT] |                 |                 |
+
+#### 4.10.4 Qualitative response categories
+
+Thematic categories from open-ended questionnaire responses. **[PENDING EXPERIMENT]**
+
+### 4.11 Discussion
 
 The implementation reported in this chapter demonstrates that the four MVP1-complete components —
 the screening engine, the rule-based triage and safety-routing engine, the classifier integration
@@ -644,24 +787,25 @@ the screening engine, the rule-based triage and safety-routing engine, the class
 bounded conversational layer's safety guardrails — meet their specified requirements under
 automated verification, with one architectural property (NFR6) verified only qualitatively rather
 than by an automated test, and two smaller structural deviations from the intended component
-decomposition (§4.2.4's conversational UI, §4.2.5's console-only notification adapter) that do not
-affect functional correctness. The zero-import design of `server/domain/triage.ts` and the
+decomposition (§4.2.2.4's conversational UI, §4.2.2.5's console-only notification adapter) that do
+not affect functional correctness. The zero-import design of `server/domain/triage.ts` and the
 100% branch coverage achieved over its enumerable input space (§4.5.1) directly support the thesis
-argument, made in the ADR underlying this design (§4.2.2), that a hard safety guarantee like rule
-R2 needs to be provable from source rather than merely likely from training data — this is the
-strongest evidence this chapter can offer toward the research objective of a safety-first triage
-architecture, precisely because it is a property that can be read out of a fully-covered,
+argument, made in the ADR underlying this design (§4.2.2.2), that a hard safety guarantee like
+rule R2 needs to be provable from source rather than merely likely from training data — this is
+the strongest evidence this chapter can offer toward the research objective of a safety-first
+triage architecture, precisely because it is a property that can be read out of a fully-covered,
 dependency-free file rather than inferred statistically.
 
 The adversarial safety evaluation (§4.6) demonstrates that the bounded conversational layer's
 guardrails are not merely a system-prompt instruction but an independently testable mechanism:
 100% of the 40 adversarial cases across six attack categories were caught, and the three genuine
 gaps the first execution of that suite surfaced (§4.6) — each a real lexicon omission, found and
-closed before this draft, not a hypothetical one — are themselves evidence that the suite exercises
-the mechanism rather than confirming an assumption. The honestly-documented boundary of what
-deterministic pattern matching cannot catch (paraphrased disclosure, novel phrasing, non-English
-input) is a property of the chosen architecture, consistent with the ADR's broader argument
-(§4.2.2) that this system prefers provable, narrow guarantees over probabilistic, broad ones.
+closed before this draft, not a hypothetical one — are themselves evidence that the suite
+exercises the mechanism rather than confirming an assumption. The honestly-documented boundary of
+what deterministic pattern matching cannot catch (paraphrased disclosure, novel phrasing,
+non-English input) is a property of the chosen architecture, consistent with the ADR's broader
+argument (§4.2.2.2) that this system prefers provable, narrow guarantees over probabilistic, broad
+ones.
 
 Two results this chapter reports are explicitly not strong enough to support a claim about
 real-world performance and should not be read as such. The latency figures in §4.7.1 characterise
@@ -675,13 +819,13 @@ because the instruction governing this chapter requires reading exactly what the
 contains rather than omitting an unflattering or uninformative result.
 
 This chapter does not discuss classifier accuracy (§4.9) or usability findings (§4.10), since
-both remain marked [DATA REQUIRED]; any interpretation of those results belongs in a revision of
-this section once the underlying data exists, not as anticipation here.
+both remain marked [DATA REQUIRED]/[PENDING EXPERIMENT]; any interpretation of those results
+belongs in a revision of this section once the underlying data exists, not as anticipation here.
 
 The end-to-end results (§4.5.3) are the one place this chapter reports a finding it did not set
 out to measure: a 37/75 failure rate (plus 9 flaky) on an isolated, confound-free run, traced to
-real, intermittent connectivity between this execution environment and the project's remote Neon
-Postgres compute rather than to any application defect — every failure was the same assertion
+real, intermittent connectivity between the evaluation environment and the project's remote
+development database rather than to any application defect — every failure was the same assertion
 type, on a navigation following a server round trip, never a functional mismatch. This should be
 read as a finding about the evaluation environment's suitability for browser-driven testing
 against a remote serverless database with a fixed 30-second assertion budget, not as evidence
@@ -693,7 +837,7 @@ available under expected load") is demonstrated in practice: the traceability ma
 PASS for NFR4 reflects a different run under different, uncaptured conditions, and this chapter's
 own reproducible measurement of the same suite tells a less reliable story.
 
-## 4.12 Limitations
+### 4.12 Limitations
 
 - **The NLP classifier is untrained.** Both the TypeScript-side default
   (`mock-classifier.ts`, `mock-0.1`) and the standalone Python service
@@ -734,47 +878,77 @@ own reproducible measurement of the same suite tells a less reliable story.
 - **The end-to-end suite is sensitive to remote-database connectivity in a way that produced a
   high, reproducible failure rate in this evaluation environment.** §4.5.3's isolated run recorded
   29/75 passing with 37 failures and 9 flaky results, traced to intermittent connectivity between
-  this environment and the project's remote Neon compute rather than an application defect. This
-  does not by itself indicate a defect in the screening flow (§4.5.2's integration tests against
-  the same database, without a browser, passed 149/149), but it does mean this chapter's own
-  reproduction of the end-to-end suite cannot be cited as strong evidence for NFR4 in the way the
-  unit and integration results can, and a warm, dedicated database connection is needed before a
-  clean end-to-end run can be treated as representative.
+  this environment and the project's remote database compute rather than an application defect.
+  This does not by itself indicate a defect in the screening flow (§4.5.2's integration tests
+  against the same database, without a browser, passed 149/149), but it does mean this chapter's
+  own reproduction of the end-to-end suite cannot be cited as strong evidence for NFR4 in the way
+  the unit and integration results can, and a warm, dedicated database connection is needed before
+  a clean end-to-end run can be treated as representative.
+- **No containerised deployment exists.** By design (§4.2.1) — the current native local-setup
+  path is deliberate and documented in `docs/local-setup.md`, but a production deployment would
+  still need a packaging/deployment story beyond `npm run build && node .output/server/index.mjs`.
 
-## 4.13 Chapter summary
+### 4.13 Chapter Summary
 
-This chapter reported what was implemented and what was measured for Mira's MVP1 build against
-commit `3c979e6`. Twelve of thirteen functional and non-functional requirements verified as fully
-met under a real, automatically-regenerated traceability matrix, with the thirteenth (NFR6)
-honestly reported as architecturally present but not automatically enforced. The screening,
-triage/safety-routing, and clinician-review components, together with the conversational layer's
-safety guardrails, are backed by 100% branch coverage on their safety-critical domain logic and a
-40-case adversarial suite with zero uncaught cases. Two components — the NLP classifier and the
-usability evaluation — remain, honestly, incomplete: MVP1 integrates a non-clinical placeholder
-classifier and has not yet run a moderated usability session, and this chapter has scaffolded
-rather than fabricated the sections those results will eventually occupy. Performance and
-interface-capture evidence is partial for documented, structural reasons (a shared development
-database and an empty screenshots directory, respectively) rather than withheld, and the chapter's
-own reproduction of the end-to-end suite surfaced a genuine, reproducible evaluation-environment
-finding — a high failure rate traced to remote database connectivity rather than to the
-application — reported in full rather than re-run until it disappeared. The next section
-consolidates every outstanding item this chapter could not close.
+This chapter reported what was implemented and what was measured for Mira's MVP1 build. Twelve of
+thirteen functional and non-functional requirements verified as fully met under a real,
+automatically-regenerated traceability matrix, with the thirteenth (NFR6) honestly reported as
+architecturally present but not automatically enforced. The screening, triage/safety-routing, and
+clinician-review components, together with the conversational layer's safety guardrails, are
+backed by 100% branch coverage on their safety-critical domain logic and a 40-case adversarial
+suite with zero uncaught cases. Two components — the NLP classifier and the usability evaluation —
+remain, honestly, incomplete: MVP1 integrates a non-clinical placeholder classifier and has not
+yet run a moderated usability session, and this chapter has scaffolded rather than fabricated the
+sections those results will eventually occupy. Performance and interface-capture evidence is
+partial for documented, structural reasons (a shared development database and an empty
+screenshots directory, respectively) rather than withheld, and the chapter's own reproduction of
+the end-to-end suite surfaced a genuine, reproducible evaluation-environment finding — a high
+failure rate traced to remote database connectivity rather than to the application — reported in
+full rather than re-run until it disappeared. §4.14 consolidates every outstanding item this
+chapter could not close.
+
+### 4.14 Outstanding Experimental Evidence
+
+The following evidence must be obtained before the final version of this chapter is submitted:
+
+1. **Interface screenshots** (§4.3) — capture all twelve interface screens via `npm run demo`
+   followed by `scripts/capture-evidence.ts`, save to `docs/screenshots/`, and index them in a new
+   `FIGURES.md` with figure numbers and captions.
+2. **A clean end-to-end test run against a warm, dedicated database** (§4.5.3, §4.11, §4.12) — to
+   determine whether the 37/75 failure rate reported was specific to this environment's
+   connectivity to the shared remote development database. Re-run `npx playwright test` (`CI=1`,
+   no concurrent database activity) against a dedicated database instance or a network path with
+   reliable access to the current one.
+3. **Latency percentiles under realistic field conditions** (§4.7.1) — a warm, dedicated database
+   and representative device/network conditions, not shared-dev-database test traffic. Source:
+   `scripts/export-evaluation-data.ts`'s `latency.csv`, once real or moderated-evaluation sessions
+   exist.
+4. **Training and evaluation setup for the DAIC-WOZ-trained classifier** (§4.9.1) — from the
+   separate Python training repository.
+5. **Accuracy, precision, recall, and F1 for the trained classifier** (§4.9.2) — from the separate
+   Python training repository.
+6. **Confusion matrix for the trained classifier** (§4.9.3) — from the separate Python training
+   repository.
+7. **Comparison of the trained classifier against a stated baseline** (§4.9.4) — from the separate
+   Python training repository, e.g. against the deterministic heuristic already implemented in
+   `mock-classifier.ts`/`main.py`.
+8. **Usability evaluation participant demographics** (§4.10.1) — from Instrument B / moderated
+   evaluation sessions.
+9. **SUS scores per participant and mean, plus the full citation for Brooke (1996)** (§4.10.2) —
+   from Instrument B and `scripts/export-evaluation-data.ts`; the citation is currently marked
+   [REFERENCE REQUIRED].
+10. **Interpretation of SUS scores against published benchmarks** (§4.10.2) — [REFERENCE REQUIRED].
+11. **Task completion rate and median time on task** (§4.10.3) — from
+    `data/evaluation-export/tasks.csv` via `scripts/export-evaluation-data.ts`.
+12. **Qualitative response categories from open-ended questionnaire items** (§4.10.4) — from
+    Instrument B.
 
 ---
 
-## Outstanding for completion
-
-| #   | Section              | Item                                                                                                                                                                                                                      | Source                                                                                                                                                                      |
-| --- | -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | §4.3                 | Captured screenshots of every interface screen, saved to `docs/screenshots/`, indexed by a new `FIGURES.md` with figure numbers and captions                                                                              | Manual capture during/after a working session with the app                                                                                                                  |
-| 2   | §4.5.3, §4.11, §4.12 | A clean end-to-end run against a warm, dedicated (non-shared) database connection, to determine whether the 37/75 failure rate reported was specific to this environment's connectivity to the shared remote Neon compute | Re-run `npx playwright test` (`CI=1`, no concurrent database activity) against a dedicated database instance or from a network path with reliable access to the current one |
-| 3   | §4.7.1               | Latency percentiles under realistic field conditions (warm, dedicated database; representative device/network), not shared-dev-database test traffic                                                                      | `scripts/export-evaluation-data.ts`'s `latency.csv`, once real or moderated-evaluation sessions exist                                                                       |
-| 4   | §4.9.1               | Training and evaluation setup for the DAIC-WOZ-trained classifier                                                                                                                                                         | Separate Python training repository                                                                                                                                         |
-| 5   | §4.9.2               | Accuracy, precision, recall, F1 for the trained classifier                                                                                                                                                                | Separate Python training repository                                                                                                                                         |
-| 6   | §4.9.3               | Confusion matrix for the trained classifier                                                                                                                                                                               | Separate Python training repository                                                                                                                                         |
-| 7   | §4.9.4               | Comparison of the trained classifier against a stated baseline                                                                                                                                                            | Separate Python training repository                                                                                                                                         |
-| 8   | §4.10.1              | Usability evaluation participant demographics                                                                                                                                                                             | Instrument B / moderated evaluation sessions                                                                                                                                |
-| 9   | §4.10.2              | SUS scores per participant and mean; citation for Brooke (1996)                                                                                                                                                           | Instrument B; `scripts/export-evaluation-data.ts`                                                                                                                           |
-| 10  | §4.10.2              | Interpretation of SUS scores against published benchmarks                                                                                                                                                                 | [CITATION REQUIRED]                                                                                                                                                         |
-| 11  | §4.10.3              | Task completion rate and median time on task                                                                                                                                                                              | `data/evaluation-export/tasks.csv` via `scripts/export-evaluation-data.ts`                                                                                                  |
-| 12  | §4.10.4              | Qualitative response categories from open-ended questionnaire items                                                                                                                                                       | Instrument B                                                                                                                                                                |
+**Provenance note.** This file consolidates and reformats `docs/chapter-four-draft.md` (the
+original, untracked-numbers-frozen draft) to match the section/table/figure numbering conventions
+used elsewhere in this thesis and to add explicit figure placeholders and a consolidated
+outstanding-evidence checklist. `docs/chapter-four-inputs.md` remains the authoritative index of
+_where_ each category of evidence lives in the repository and _how_ to reproduce it; this file is
+the chapter text itself. Regenerate both from the commands listed in the generation record above
+whenever code under `server/`, `app/`, or `tests/` changes.

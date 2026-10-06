@@ -253,7 +253,7 @@ async function handleSkipFreeText() {
 <style scoped>
 .screen-page {
   min-height: 100svh;
-  overflow: hidden;
+  overflow-x: hidden;
 }
 
 .screen-page__inner {

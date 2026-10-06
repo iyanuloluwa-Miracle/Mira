@@ -1,20 +1,29 @@
 <script setup lang="ts">
-// [FR1] The missing counterpart to login.vue — server/api/auth/register.post.ts has always
-// supported a cold registration (no prior session required, see that file's own comment
-// distinguishing it from claim-account.post.ts), it just never had a page. Minimal and
-// functional, matching login.vue's own scope and style.
-const { register } = useAuth()
+// [FR1][R9] Counterpart to login.vue. Cold registration (no prior session) uses
+// server/api/auth/register.post.ts. If the visitor already has an anonymous session — the
+// normal path after a private check — claim-account.post.ts upgrades that same User in place
+// so screening history is preserved (see that route's own comment).
+const { register, claimAccount, refresh, session } = useAuth()
 
 const email = ref('')
 const password = ref('')
 const submitting = ref(false)
 const error = ref<string | null>(null)
 
+onMounted(() => {
+  void refresh()
+})
+
 async function handleSubmit() {
   submitting.value = true
   error.value = null
   try {
-    await register(email.value, password.value)
+    await refresh()
+    if (session.value.authenticated && session.value.authMode === 'ANONYMOUS') {
+      await claimAccount(email.value, password.value)
+    } else {
+      await register(email.value, password.value)
+    }
     await navigateTo('/')
   } catch (err) {
     const fetchError = err as {

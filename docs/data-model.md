@@ -286,7 +286,7 @@ never carry PHI or free text; there's no redactor sitting between this table and
 writes to it the way there is for `server/utils/logger.ts` (rule R4), so that discipline is
 enforced by code review on anything that writes an `AuditLog` row, not by the schema.
 
-### Evaluation instrumentation (NFR3, Chapter Four Section 3.8.3)
+### Evaluation instrumentation (NFR3; methodology per Chapter Three §3.8.3, results reported in Chapter Four)
 
 Also left off the diagram above, for the same reason `AuditLog` is: `Metric` has no foreign key
 at all — `sessionId` is a plain nullable column, deliberately not a relation, so a latency

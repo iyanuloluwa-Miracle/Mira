@@ -39,9 +39,14 @@ Reproduce in this order against a real database (see [docs/local-setup.md](local
 5. Frontend performance/accessibility figures (bundle size, Lighthouse, contrast): see
    [`docs/frontend-metrics.md`](frontend-metrics.md).
 
-`docs/chapter-four-draft.md` (not tracked in this repository — a working thesis draft) records a
-specific past run's numbers against a named commit; treat this document, not that snapshot, as
-the pointer to _how_ to regenerate current figures.
+`docs/chapter-four-draft.md` is a working thesis draft that records a specific past run's numbers
+against a named commit; treat this document, not that snapshot, as the pointer to _how_ to
+regenerate current figures. [`docs/CHAPTER_FOUR.md`](CHAPTER_FOUR.md) is the polished,
+submission-formatted chapter derived from that draft — reformatted to the thesis's section, table,
+and figure numbering conventions, with explicit figure placeholders and a consolidated outstanding-
+evidence checklist. When code under `server/`, `app/`, or `tests/` changes, regenerate the figures
+using the commands below, update `chapter-four-draft.md`'s generation record, then carry the
+changes into `CHAPTER_FOUR.md`.
 
 ## LLM safety test results
 
