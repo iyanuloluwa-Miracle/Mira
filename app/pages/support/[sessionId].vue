@@ -185,7 +185,8 @@ useHead({ title: CHAT_HEADER_TITLE })
 
     <template v-else>
       <div ref="listEl" class="flex-1 overflow-y-auto px-4 py-4" aria-live="polite">
-        <div v-if="messages.length === 0" class="flex h-full flex-col justify-end gap-4">
+        <!-- Keep introductory prompts near the header instead of creating a large empty gap. -->
+        <div v-if="messages.length === 0" class="flex flex-col gap-4">
           <p class="text-sm text-slate-600">{{ CHAT_EMPTY_STATE_INTRO }}</p>
           <div class="flex flex-col gap-2">
             <button
