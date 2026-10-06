@@ -143,107 +143,124 @@ async function handleSkipFreeText() {
 </script>
 
 <template>
-  <main class="mx-auto min-h-svh max-w-md px-6 py-8 pb-28">
+  <main class="screen-page mira-atmosphere">
     <SafetyExitButton />
 
-    <div v-if="loadError" class="mt-10 text-center">
-      <p class="text-base text-slate-900">{{ loadError }}</p>
-      <NuxtLink to="/" class="mt-4 inline-block text-indigo-700 underline">Start over</NuxtLink>
-    </div>
+    <div class="screen-page__inner">
+      <div v-if="loadError" class="text-center">
+        <p class="text-base text-slate-900">{{ loadError }}</p>
+        <NuxtLink to="/" class="mt-4 inline-block text-teal-800 underline">Start over</NuxtLink>
+      </div>
 
-    <div v-else-if="!ready" class="mt-10 text-center">
-      <p class="text-base text-slate-600">Loading your screening…</p>
-    </div>
+      <div v-else-if="!ready" class="text-center">
+        <p class="text-base text-slate-600">Loading your screening…</p>
+      </div>
 
-    <div v-else-if="completing" class="mt-10 text-center">
-      <p class="text-base text-slate-600">Finishing up…</p>
-    </div>
+      <div v-else-if="completing" class="text-center">
+        <p class="text-base text-slate-600">Finishing up…</p>
+      </div>
 
-    <div v-else-if="showFreeTextStep" class="mt-6 flex flex-col gap-6">
-      <div>
-        <div class="flex items-center gap-2">
-          <h1 class="text-xl font-semibold text-slate-900">{{ FREE_TEXT_HEADING }}</h1>
-          <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-            {{ FREE_TEXT_OPTIONAL_LABEL }}
-          </span>
+      <div v-else-if="showFreeTextStep" class="flex flex-col gap-6">
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-xl font-semibold text-slate-900">{{ FREE_TEXT_HEADING }}</h1>
+            <span class="rounded-md bg-teal-50 px-2 py-0.5 text-xs font-medium text-teal-800">
+              {{ FREE_TEXT_OPTIONAL_LABEL }}
+            </span>
+          </div>
+          <p class="mt-2 text-sm text-slate-600">{{ FREE_TEXT_EXPLANATION }}</p>
         </div>
-        <p class="mt-2 text-sm text-slate-600">{{ FREE_TEXT_EXPLANATION }}</p>
+
+        <div>
+          <textarea
+            v-model="freeTextInput"
+            :maxlength="FREE_TEXT_MAX_LENGTH"
+            :placeholder="FREE_TEXT_PLACEHOLDER"
+            rows="6"
+            class="w-full rounded-lg border border-slate-300 bg-white/80 px-4 py-3 text-base"
+          />
+          <p class="mt-1 text-right text-xs text-slate-500">
+            {{ FREE_TEXT_CHARACTER_GUIDE(freeTextRemaining) }}
+          </p>
+        </div>
+
+        <p v-if="freeTextError" role="alert" class="text-sm text-red-700">{{ freeTextError }}</p>
+
+        <div class="flex flex-col gap-3">
+          <button
+            type="button"
+            class="min-h-[44px] rounded-lg bg-teal-700 px-4 py-3 text-base font-semibold text-white hover:bg-teal-800 disabled:opacity-40"
+            :disabled="!canSubmitFreeText"
+            @click="handleSubmitFreeText"
+          >
+            {{ FREE_TEXT_CONTINUE_LABEL }}
+          </button>
+          <div class="flex gap-3">
+            <button
+              type="button"
+              class="min-h-[44px] flex-1 rounded-lg border border-slate-300 bg-white/70 px-4 py-3 text-base font-semibold text-slate-900"
+              @click="showFreeTextStep = false"
+            >
+              Back
+            </button>
+            <button
+              type="button"
+              class="min-h-[44px] flex-1 rounded-lg px-4 py-3 text-base font-semibold text-slate-700 underline"
+              @click="handleSkipFreeText"
+            >
+              {{ FREE_TEXT_SKIP_LABEL }}
+            </button>
+          </div>
+        </div>
       </div>
 
-      <div>
-        <textarea
-          v-model="freeTextInput"
-          :maxlength="FREE_TEXT_MAX_LENGTH"
-          :placeholder="FREE_TEXT_PLACEHOLDER"
-          rows="6"
-          class="w-full rounded-lg border border-slate-300 px-4 py-3 text-base"
+      <div v-else-if="currentItem" class="flex flex-col gap-6">
+        <ScreeningProgressBar :current="currentPosition" :total="totalItems" />
+
+        <ScreeningQuestionCard
+          :item-code="currentItem.itemCode"
+          :prompt="currentItem.prompt"
+          :options="state.responseOptions"
+          :model-value="currentValue"
+          @update:model-value="handleAnswer"
         />
-        <p class="mt-1 text-right text-xs text-slate-500">
-          {{ FREE_TEXT_CHARACTER_GUIDE(freeTextRemaining) }}
-        </p>
-      </div>
 
-      <p v-if="freeTextError" role="alert" class="text-sm text-red-700">{{ freeTextError }}</p>
+        <p v-if="completeError" role="alert" class="text-sm text-red-700">{{ completeError }}</p>
 
-      <div class="flex flex-col gap-3">
-        <button
-          type="button"
-          class="min-h-[44px] rounded-lg bg-indigo-600 px-4 py-3 text-base font-semibold text-white hover:bg-indigo-700 disabled:opacity-40"
-          :disabled="!canSubmitFreeText"
-          @click="handleSubmitFreeText"
-        >
-          {{ FREE_TEXT_CONTINUE_LABEL }}
-        </button>
         <div class="flex gap-3">
           <button
             type="button"
-            class="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-4 py-3 text-base font-semibold text-slate-900"
-            @click="showFreeTextStep = false"
+            class="min-h-[44px] flex-1 rounded-lg border border-slate-300 bg-white/70 px-4 py-3 text-base font-semibold text-slate-900 disabled:opacity-40"
+            :disabled="state.currentIndex === 0"
+            @click="handleBack"
           >
             Back
           </button>
           <button
             type="button"
-            class="min-h-[44px] flex-1 rounded-lg px-4 py-3 text-base font-semibold text-slate-600 underline"
-            @click="handleSkipFreeText"
+            class="min-h-[44px] flex-1 rounded-lg bg-teal-700 px-4 py-3 text-base font-semibold text-white hover:bg-teal-800 disabled:opacity-40"
+            :disabled="!canAdvance"
+            @click="handleNext"
           >
-            {{ FREE_TEXT_SKIP_LABEL }}
+            {{ isLastItem ? 'Finish' : 'Next' }}
           </button>
         </div>
       </div>
     </div>
-
-    <div v-else-if="currentItem" class="mt-6 flex flex-col gap-6">
-      <ScreeningProgressBar :current="currentPosition" :total="totalItems" />
-
-      <ScreeningQuestionCard
-        :item-code="currentItem.itemCode"
-        :prompt="currentItem.prompt"
-        :options="state.responseOptions"
-        :model-value="currentValue"
-        @update:model-value="handleAnswer"
-      />
-
-      <p v-if="completeError" role="alert" class="text-sm text-red-700">{{ completeError }}</p>
-
-      <div class="flex gap-3">
-        <button
-          type="button"
-          class="min-h-[44px] flex-1 rounded-lg border border-slate-300 px-4 py-3 text-base font-semibold text-slate-900 disabled:opacity-40"
-          :disabled="state.currentIndex === 0"
-          @click="handleBack"
-        >
-          Back
-        </button>
-        <button
-          type="button"
-          class="min-h-[44px] flex-1 rounded-lg bg-indigo-600 px-4 py-3 text-base font-semibold text-white hover:bg-indigo-700 disabled:opacity-40"
-          :disabled="!canAdvance"
-          @click="handleNext"
-        >
-          {{ isLastItem ? 'Finish' : 'Next' }}
-        </button>
-      </div>
-    </div>
   </main>
 </template>
+
+<style scoped>
+.screen-page {
+  min-height: 100svh;
+  overflow-x: hidden;
+}
+
+.screen-page__inner {
+  position: relative;
+  width: 100%;
+  max-width: 28rem;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 7rem;
+}
+</style>

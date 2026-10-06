@@ -1,4 +1,4 @@
-// [NFR2] Runs on the default 'mobile-360' project (playwright.config.ts) — a real browser at a
+// [FR2][FR3][FR4][NFR1][NFR2][NFR5] Runs on the default 'mobile-360' project (playwright.config.ts) — a real browser at a
 // 360px viewport, the acceptance criterion this file exists to verify: the full screening flow
 // is completable at that width, not just "should work in theory."
 

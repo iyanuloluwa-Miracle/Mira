@@ -51,24 +51,47 @@ classifier or the LLM, can ever decide, lower, or override a risk band. See
 
 ## Quick start
 
-Requirements: Node (see [.nvmrc](.nvmrc)) and npm. Postgres is needed too — either via Docker,
-or without it (see below).
+No Docker anywhere — everything here runs natively, orchestrated through npm scripts.
+
+**Prerequisites**: Node (see [.nvmrc](.nvmrc)), npm, Python 3.10+ (for
+[services/classifier/](services/classifier/)), and a reachable Postgres database. See
+[docs/local-setup.md](docs/local-setup.md) for three ways to get Postgres running (a native
+install, a hosted free tier, or — as a documented, unimplemented last resort — what SQLite would
+cost you). No local Postgres and don't want to set one up yet? `npm run db:local` starts an
+in-process, Postgres-compatible database (via [PGlite](https://pglite.dev)) instead — see the
+comment at the top of [`scripts/dev-db.ts`](scripts/dev-db.ts) for the two ways it behaves
+differently from real Postgres (`prisma migrate dev` and prepared statements).
 
 ```bash
 npm install
-cp .env.example .env        # fill in local values; never commit .env
-npm run dev                 # Nuxt app at http://localhost:3000
+npm run setup                # checks prerequisites, bootstraps .env, migrates, seeds, and
+                              # creates services/classifier/'s virtual environment
+npm run dev:all               # Nuxt app + classifier service together
 ```
 
-### Postgres, with or without Docker
+If the database becomes unreachable later, the app fails to boot with a clear message naming
+`DATABASE_URL` rather than a raw connection error — see
+`server/plugins/verify-database-reachable.ts`.
 
-With Docker: `docker compose up -d db`, then `npx prisma migrate deploy && npm run db:seed`.
+### The four npm scripts
 
-Without Docker: `npm run db:local` starts an in-process, Postgres-compatible database (via
-[PGlite](https://pglite.dev)) in your terminal — leave it running and, in another terminal, run
-`npx prisma migrate deploy && npm run db:seed` against the URL it prints. See the comment at the
-top of [`scripts/dev-db.ts`](scripts/dev-db.ts) for the two ways it behaves differently from
-real Postgres (`prisma migrate dev` and prepared statements).
+- **`npm run setup`** — checks Node (against [.nvmrc](.nvmrc)), npm, Python 3.10+, and that
+  `DATABASE_URL` is reachable, failing with a specific, actionable message per missing
+  prerequisite and installing nothing itself at that stage. Once every check passes, it creates
+  `.env` from `.env.example` if one doesn't exist yet (generating random development values for
+  `ENCRYPTION_KEY`, `IDENTIFIER_HASH_PEPPER`, and `AUTH_SECRET` so the app can boot), runs
+  `prisma migrate deploy`, runs the base seed (`npm run db:seed`), and creates
+  `services/classifier/`'s virtual environment with its dependencies installed. Safe to re-run —
+  it never touches an existing `.env` or virtual environment.
+- **`npm run classifier`** — starts the classifier service by invoking its virtual environment's
+  own Python interpreter directly (no shell "activate" step), so it works the same way on
+  Windows and Unix. Assumes `npm run setup` has already created the venv.
+- **`npm run dev:all`** — runs the Nuxt dev server and the classifier service together via
+  `concurrently`, with colour-coded `nuxt`/`classifier` log prefixes.
+- **`npm run demo`** — resets the database, seeds six deterministic synthetic walkthrough
+  scenarios (`prisma/demo-seed.ts`: minimal/moderate/high/crisis-risk sessions, an already-reviewed
+  escalation, and a user with a multi-session history), then starts `dev:all`. This is the single
+  command to run before an examiner or usability-test walkthrough.
 
 ## Running tests
 
@@ -88,8 +111,25 @@ classifier is unreachable). To use a trained model:
 
 1. Implement the contract described in
    [services/classifier/README.md](services/classifier/README.md).
-2. Point `CLASSIFIER_SERVICE_URL` (see [.env.example](.env.example)) at your running instance.
-3. Run `services/classifier/` via its own `Dockerfile`, or `docker compose up classifier`.
+2. Point `CLASSIFIER_SERVICE_URL` (see [.env.example](.env.example)) at your running instance,
+   and set `CLASSIFIER_MODE="http"`.
+3. Run it with `npm run classifier` (or `npm run dev:all` to run it alongside the Nuxt app).
+
+## Deployment
+
+A plain Node deployment — no container required, though one can be added later without changing
+any application code, since the build output below is already a self-contained Node server:
+
+```bash
+npm run build                          # produces .output/
+node .output/server/index.mjs          # runs the built server
+```
+
+Required environment variables are the same ones in [.env.example](.env.example) — in
+particular `DATABASE_URL`, `ENCRYPTION_KEY`, `IDENTIFIER_HASH_PEPPER`, and `AUTH_SECRET` must be
+set to real, non-development values (never the ones `npm run setup` generates for local
+development), and `NODE_ENV="production"`. Run `npx prisma migrate deploy` against the production
+database before starting the server for the first time.
 
 ## Research provenance and citation
 

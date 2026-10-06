@@ -1,4 +1,4 @@
-// Integration coverage for the usability-evaluation instrumentation (Chapter Four, Section
+// [NFR1] Integration coverage for the usability-evaluation instrumentation (Chapter Four, Section
 // 3.8.3) — against a real built server and a real (if ephemeral) Postgres. Two servers: one with
 // EVALUATION_MODE unset (the default, off) to prove the flag actually gates the feature, and one
 // with it explicitly enabled to exercise the real start/event/end flow.

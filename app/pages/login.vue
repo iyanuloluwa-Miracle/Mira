@@ -14,8 +14,20 @@ async function handleSubmit() {
   try {
     await login(email.value, password.value)
     await navigateTo('/')
-  } catch {
-    error.value = 'Incorrect email or password.'
+  } catch (err) {
+    const fetchError = err as {
+      statusCode?: number
+      data?: { statusMessage?: string }
+      statusMessage?: string
+    }
+    if (fetchError.statusCode === 429) {
+      error.value = 'Too many attempts. Please wait a few minutes and try again.'
+    } else if (fetchError.statusCode === 403) {
+      error.value = 'Could not verify this request. Refresh the page and try again.'
+    } else {
+      error.value =
+        fetchError.data?.statusMessage ?? fetchError.statusMessage ?? 'Incorrect email or password.'
+    }
     useEvaluation().logError()
   } finally {
     submitting.value = false
@@ -24,51 +36,57 @@ async function handleSubmit() {
 </script>
 
 <template>
-  <main class="mx-auto flex min-h-svh max-w-md flex-col justify-center gap-6 px-6 py-10">
-    <h1 class="text-2xl font-semibold text-slate-900">Sign in</h1>
+  <main class="mira-atmosphere">
+    <div
+      class="relative mx-auto flex min-h-svh w-full max-w-md flex-col justify-center gap-6 px-6 py-10"
+    >
+      <h1 class="font-serif text-4xl font-bold tracking-tight text-slate-900">Sign in</h1>
 
-    <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
-      <div>
-        <label for="email" class="mb-1 block text-sm font-medium text-slate-900">Email</label>
-        <input
-          id="email"
-          v-model="email"
-          type="email"
-          required
-          autocomplete="email"
-          class="min-h-[44px] w-full rounded-lg border border-slate-300 px-4 py-2 text-base"
-        />
-      </div>
-      <div>
-        <label for="password" class="mb-1 block text-sm font-medium text-slate-900">
-          Password
-        </label>
-        <input
-          id="password"
-          v-model="password"
-          type="password"
-          required
-          autocomplete="current-password"
-          class="min-h-[44px] w-full rounded-lg border border-slate-300 px-4 py-2 text-base"
-        />
-      </div>
+      <form class="flex flex-col gap-4" @submit.prevent="handleSubmit">
+        <div>
+          <label for="email" class="mb-1 block text-sm font-medium text-slate-900">Email</label>
+          <input
+            id="email"
+            v-model="email"
+            type="email"
+            required
+            autocomplete="email"
+            class="min-h-[44px] w-full rounded-lg border border-teal-900/20 bg-teal-900/[0.04] px-4 py-2 text-base text-slate-900 placeholder:text-slate-500"
+          />
+        </div>
+        <div>
+          <label for="password" class="mb-1 block text-sm font-medium text-slate-900">
+            Password
+          </label>
+          <input
+            id="password"
+            v-model="password"
+            type="password"
+            required
+            autocomplete="current-password"
+            class="min-h-[44px] w-full rounded-lg border border-teal-900/20 bg-teal-900/[0.04] px-4 py-2 text-base text-slate-900 placeholder:text-slate-500"
+          />
+        </div>
 
-      <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }}</p>
+        <p v-if="error" role="alert" class="text-sm text-red-700">{{ error }}</p>
 
-      <button
-        type="submit"
-        class="min-h-[44px] rounded-lg bg-indigo-600 px-6 py-3 text-base font-semibold text-white hover:bg-indigo-700 disabled:opacity-60"
-        :disabled="submitting"
+        <button
+          type="submit"
+          class="min-h-[44px] rounded-lg bg-teal-700 px-6 py-3 text-base font-semibold text-white hover:bg-teal-800 disabled:opacity-60"
+          :disabled="submitting"
+        >
+          {{ submitting ? 'Signing in…' : 'Sign in' }}
+        </button>
+      </form>
+
+      <p class="text-center text-sm text-slate-600">
+        Don't have an account?
+        <NuxtLink to="/register" class="font-medium text-teal-800 underline">Create one</NuxtLink>
+      </p>
+
+      <NuxtLink to="/" class="text-center text-sm font-medium text-teal-800 underline"
+        >Back</NuxtLink
       >
-        {{ submitting ? 'Signing in…' : 'Sign in' }}
-      </button>
-    </form>
-
-    <p class="text-center text-sm text-slate-600">
-      Don't have an account?
-      <NuxtLink to="/register" class="text-indigo-700 underline">Create one</NuxtLink>
-    </p>
-
-    <NuxtLink to="/" class="text-center text-sm text-indigo-700 underline">Back</NuxtLink>
+    </div>
   </main>
 </template>

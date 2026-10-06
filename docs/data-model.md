@@ -286,7 +286,7 @@ never carry PHI or free text; there's no redactor sitting between this table and
 writes to it the way there is for `server/utils/logger.ts` (rule R4), so that discipline is
 enforced by code review on anything that writes an `AuditLog` row, not by the schema.
 
-### Evaluation instrumentation (NFR3, Chapter Four Section 3.8.3)
+### Evaluation instrumentation (NFR3; methodology per Chapter Three §3.8.3, results reported in Chapter Four)
 
 Also left off the diagram above, for the same reason `AuditLog` is: `Metric` has no foreign key
 at all — `sessionId` is a plain nullable column, deliberately not a relation, so a latency
@@ -312,7 +312,7 @@ against every table, not just the ones the deletion code remembered to touch.
 The initial migration lives at
 [`prisma/migrations/20260821000000_init/`](../prisma/migrations/20260821000000_init/). It was
 generated offline with `prisma migrate diff --from-empty --to-schema-datamodel` because no
-Postgres instance was reachable in the environment that authored it — run `docker compose up -d
-db` followed by `npx prisma migrate dev` against a real database before trusting this migration
-in any environment that matters, and let `prisma migrate dev` take over authoring migrations
-from this point on.
+Postgres instance was reachable in the environment that authored it — get a real database running
+first (see [docs/local-setup.md](local-setup.md)) and run `npx prisma migrate dev` against it
+before trusting this migration in any environment that matters, and let `prisma migrate dev` take
+over authoring migrations from this point on.

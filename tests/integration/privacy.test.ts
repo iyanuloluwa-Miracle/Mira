@@ -1,4 +1,4 @@
-// Integration coverage for the data-subject rights dashboard (NFR1) — against a real built
+// [NFR1] Integration coverage for the data-subject rights dashboard — against a real built
 // server and a real (if ephemeral) Postgres. Covers exactly the prompt's acceptance criteria:
 // a direct database query returns zero rows for the user across every table after deletion, and
 // the export contains everything the "what is stored" summary claims exists.

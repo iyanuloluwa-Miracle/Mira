@@ -26,6 +26,10 @@ venv
 prisma/*.db
 prisma/dev.db*
 
+# Demo seed's raw session token for scripts/capture-evidence.ts — a dev-only cookie value for a
+# synthetic account, never a real credential, but not something to commit either.
+scripts/.demo-session-tokens.json
+
 # Logs
 logs
 *.log

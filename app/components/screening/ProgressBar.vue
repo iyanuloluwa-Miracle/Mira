@@ -21,7 +21,7 @@ const widthClass = computed(() => useWidthClass(percentage.value))
 <template>
   <div class="w-full">
     <div
-      class="h-2 w-full overflow-hidden rounded-full bg-slate-200"
+      class="h-3 w-full overflow-hidden rounded-full border border-teal-900/20 bg-teal-900/15"
       role="progressbar"
       :aria-valuenow="current"
       :aria-valuemin="1"
@@ -29,10 +29,10 @@ const widthClass = computed(() => useWidthClass(percentage.value))
       :aria-label="announcement"
     >
       <div
-        :class="['h-full rounded-full bg-indigo-600 transition-[width] duration-300', widthClass]"
+        :class="['h-full rounded-full bg-teal-800 transition-[width] duration-300', widthClass]"
       />
     </div>
-    <p class="mt-2 text-sm text-slate-600" aria-live="polite" aria-atomic="true">
+    <p class="mt-2 text-sm font-medium text-slate-700" aria-live="polite" aria-atomic="true">
       {{ announcement }}
     </p>
   </div>

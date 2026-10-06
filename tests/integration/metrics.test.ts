@@ -1,4 +1,4 @@
-// Integration coverage for NFR3 latency instrumentation (server/utils/metrics.ts) — against a
+// [NFR3] Integration coverage for latency instrumentation (server/utils/metrics.ts) — against a
 // real built server and a real (if ephemeral) Postgres. Covers exactly the prompt's acceptance
 // criterion: a completed screening produces latency rows, plus the client-timing endpoint and
 // the admin percentile/triage-distribution summary those rows feed.

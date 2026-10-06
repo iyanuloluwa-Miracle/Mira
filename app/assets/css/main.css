@@ -8,12 +8,36 @@
 
 body {
   font-family: var(--font-sans);
+  background-color: #eef5f3;
+}
+
+/* Shared Mira mist atmosphere — used on landing-adjacent screens (screening, crisis, etc.)
+   so the product feels continuous without shipping a background image [NFR2]. */
+.mira-atmosphere {
+  position: relative;
+  isolation: isolate;
+  min-height: 100%;
+  background:
+    radial-gradient(90% 60% at 85% 0%, rgba(158, 201, 196, 0.45) 0%, transparent 55%),
+    radial-gradient(70% 50% at 10% 80%, rgba(120, 168, 180, 0.28) 0%, transparent 50%),
+    linear-gradient(168deg, #eef5f3 0%, #d8e8e4 55%, #c5d9d4 100%);
+}
+
+.mira-atmosphere::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  opacity: 0.22;
+  pointer-events: none;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
 }
 
 /* [Accessibility] A visible focus ring everywhere, not just where the browser default happens
    to show one — required for anyone navigating by keyboard or switch device. */
 :focus-visible {
-  outline: 3px solid var(--color-indigo-600, #4f46e5);
+  outline: 3px solid var(--color-teal-700, #0f766e);
   outline-offset: 2px;
 }
 

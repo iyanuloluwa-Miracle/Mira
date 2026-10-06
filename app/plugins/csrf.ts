@@ -21,13 +21,28 @@ const CSRF_BOOTSTRAP_SCRIPT = `(function () {
   var nativeFetch = window.fetch.bind(window);
   var SAFE_METHODS = ['GET', 'HEAD', 'OPTIONS'];
   window.fetch = function (input, init) {
-    var method = ((init && init.method) || 'GET').toUpperCase();
+    var method = 'GET';
+    if (init && init.method) method = String(init.method);
+    else if (typeof Request !== 'undefined' && input instanceof Request) method = input.method || 'GET';
+    method = method.toUpperCase();
     if (SAFE_METHODS.indexOf(method) === -1) {
       var match = document.cookie.match(/(?:^|; )mira_csrf=([^;]*)/);
       if (match) {
-        var headers = new Headers((init && init.headers) || {});
-        headers.set('x-csrf-token', decodeURIComponent(match[1]));
-        init = Object.assign({}, init, { headers: headers });
+        var token = decodeURIComponent(match[1]);
+        if (typeof Request !== 'undefined' && input instanceof Request) {
+          var reqHeaders = new Headers(input.headers);
+          if (!reqHeaders.has('x-csrf-token')) reqHeaders.set('x-csrf-token', token);
+          input = new Request(input, { headers: reqHeaders });
+          if (init && init.headers) {
+            var initHeaders = new Headers(init.headers);
+            if (!initHeaders.has('x-csrf-token')) initHeaders.set('x-csrf-token', token);
+            init = Object.assign({}, init, { headers: initHeaders });
+          }
+        } else {
+          var headers = new Headers((init && init.headers) || {});
+          if (!headers.has('x-csrf-token')) headers.set('x-csrf-token', token);
+          init = Object.assign({}, init || {}, { headers: headers });
+        }
       }
     }
     return nativeFetch(input, init);

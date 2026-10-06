@@ -8,7 +8,9 @@ useHead({ title: 'Get help now' })
 </script>
 
 <template>
-  <main class="mx-auto max-w-md px-6 py-10">
-    <SafetyCrisisScreen />
+  <main class="mira-atmosphere">
+    <div class="relative mx-auto w-full max-w-lg px-5 py-8 pb-10 sm:px-8">
+      <SafetyCrisisScreen />
+    </div>
   </main>
 </template>

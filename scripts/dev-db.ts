@@ -1,8 +1,8 @@
-// Docker-free local Postgres for development and manual verification. Starts an in-process
-// PGlite instance (real Postgres, compiled to WASM) behind a TCP socket that speaks the actual
-// Postgres wire protocol, so Prisma, `psql`, or anything else that takes a postgresql:// URL
-// can connect to it exactly like a normal server. Not used in CI and not a production
-// database — see docker-compose.yml for that when Docker is available.
+// Local Postgres for development and manual verification with nothing else installed. Starts an
+// in-process PGlite instance (real Postgres, compiled to WASM) behind a TCP socket that speaks
+// the actual Postgres wire protocol, so Prisma, `psql`, or anything else that takes a
+// postgresql:// URL can connect to it exactly like a normal server. Not used in CI and not a
+// production database — see docs/local-setup.md for real Postgres options.
 //
 // Two things behave differently here than against real Postgres, both because this server
 // backs every client connection with one shared PGlite session rather than a real per-connection

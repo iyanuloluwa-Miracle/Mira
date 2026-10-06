@@ -107,7 +107,8 @@ Full detail lives in [data-model.md](data-model.md); schema source of truth is
 
 ## Deployment shape
 
-Three deployable units, matching `docker-compose.yml`:
+Three deployable units, run natively (no containers) — see the root [README.md](../README.md)
+and [docs/local-setup.md](local-setup.md):
 
 1. **Nuxt app** (`app/`, `server/`) — the web app and its API.
 2. **Classifier service** (`services/classifier/`) — a separately deployable Python FastAPI

@@ -1,4 +1,4 @@
-// Integration coverage for prompt 7 (FR2, FR4, FR6, NFR3): the screening session API, against
+// [FR2][FR3][FR4][FR6][NFR1][NFR3][NFR4][NFR5] Integration coverage for prompt 7: the screening session API, against
 // a real built server and a real (if ephemeral) Postgres — see
 // tests/integration/helpers/test-server.ts for why.
 //
@@ -213,6 +213,38 @@ describe('full happy path', () => {
 
     expect(first.status).toBe(200)
     expect(second.status).toBe(200)
+
+    const triageResults = await prisma.triageResult.findMany({ where: { sessionId } })
+    expect(triageResults).toHaveLength(1)
+  })
+
+  // Regression test: a real P2002 on TriageResult.sessionId surfaced from this exact endpoint
+  // during this prompt's own verification pass — two requests both read status IN_PROGRESS
+  // before either commits, and the loser's triageResult.create() lost the race. Promise.all,
+  // not two sequential awaits (the test above), is what actually reproduces that — sequential
+  // requests never see IN_PROGRESS twice, since the first one's commit is long done by the time
+  // the second starts.
+  it('two truly concurrent completion requests both succeed with the same result, never a 500', async () => {
+    const cookie = await startAnonymousSession()
+    const { sessionId } = await startScreening(cookie)
+    await answerAll(cookie, sessionId, allItemsAtZero())
+
+    const [first, second] = await Promise.all([
+      fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
+        method: 'POST',
+        headers: withCsrf(cookie)
+      }),
+      fetch(`${server.baseUrl}/api/screening/${sessionId}/complete`, {
+        method: 'POST',
+        headers: withCsrf(cookie)
+      })
+    ])
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(200)
+    const [firstBody, secondBody] = await Promise.all([first.json(), second.json()])
+    expect(firstBody.riskLevel).toBe(secondBody.riskLevel)
+    expect(firstBody.phq9Total).toBe(secondBody.phq9Total)
 
     const triageResults = await prisma.triageResult.findMany({ where: { sessionId } })
     expect(triageResults).toHaveLength(1)

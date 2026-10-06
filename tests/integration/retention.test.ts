@@ -1,4 +1,4 @@
-// Integration coverage for the storage-limitation retention task (NFR1) — real, if ephemeral,
+// [NFR1] Integration coverage for the storage-limitation retention task — real, if ephemeral,
 // Postgres, real Prisma cascades. runRetentionTask() has no HTTP route (it only ever runs on
 // Nitro's scheduler, see server/tasks/retention.ts), so this calls it directly against an
 // ephemeral database rather than through a spawned server — see helpers/ephemeral-db.ts.

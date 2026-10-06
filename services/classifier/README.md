@@ -97,7 +97,8 @@ pip install -r requirements.txt
 uvicorn app.main:app --reload --port 8001
 ```
 
-Or via `docker compose up classifier` from the repository root. Point the Nuxt app at it by
+Or, from the repository root, `npm run classifier` (starts this service from its
+`.venv`, created by `npm run setup`). Point the Nuxt app at it by
 setting `CLASSIFIER_MODE="http"` and `CLASSIFIER_SERVICE_URL` (see
 [`.env.example`](../../.env.example)) — `CLASSIFIER_MODE` defaults to `"mock"`, which uses
 `server/services/classifier/mock-classifier.ts` instead and never calls this service at all.

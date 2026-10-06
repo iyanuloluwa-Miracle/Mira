@@ -1,4 +1,4 @@
-// Integration coverage for the bounded conversational layer (component 4, rule R6): the
+// [NFR1] Integration coverage for the bounded conversational layer (component 4, rule R6): the
 // pre-filter short-circuit, the post-filter's effect on what's persisted, consent-gated
 // transcript storage, and that plaintext never appears in a log line — against a real built
 // server and a real (if ephemeral) Postgres. LLM_MODE is left at its default ("mock") so this
