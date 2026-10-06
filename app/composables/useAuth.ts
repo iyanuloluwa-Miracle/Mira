@@ -16,6 +16,13 @@ interface AuthResult {
 export function useAuth() {
   const session = useState<AuthSession>('auth-session', () => ({ authenticated: false }))
 
+  function csrfHeaders(): Record<string, string> {
+    if (!import.meta.client) return {}
+
+    const match = document.cookie.match(/(?:^|; )mira_csrf=([^;]*)/)
+    return match ? { 'x-csrf-token': decodeURIComponent(match[1]!) } : {}
+  }
+
   function applyResult(result: AuthResult) {
     session.value = { authenticated: true, pseudonym: result.pseudonym, authMode: result.authMode }
   }
@@ -29,35 +36,55 @@ export function useAuth() {
   async function ensureSession(): Promise<void> {
     await refresh()
     if (!session.value.authenticated) {
-      applyResult(await $fetch<AuthResult>('/api/auth/anonymous-start', { method: 'POST' }))
+      applyResult(
+        await $fetch<AuthResult>('/api/auth/anonymous-start', {
+          method: 'POST',
+          headers: csrfHeaders()
+        })
+      )
     }
   }
 
   async function register(email: string, password: string): Promise<void> {
+    // A page response normally issues the CSRF cookie, but refreshing here also covers a
+    // cached/first client render before submitting. Keep the header local to the auth request
+    // instead of depending on a global fetch patch being installed during hydration.
+    await refresh()
     applyResult(
-      await $fetch<AuthResult>('/api/auth/register', { method: 'POST', body: { email, password } })
+      await $fetch<AuthResult>('/api/auth/register', {
+        method: 'POST',
+        body: { email, password },
+        headers: csrfHeaders()
+      })
     )
   }
 
   async function login(email: string, password: string): Promise<void> {
+    await refresh()
     applyResult(
-      await $fetch<AuthResult>('/api/auth/login', { method: 'POST', body: { email, password } })
+      await $fetch<AuthResult>('/api/auth/login', {
+        method: 'POST',
+        body: { email, password },
+        headers: csrfHeaders()
+      })
     )
   }
 
   // Upgrades the current anonymous session to a registered account in place, preserving
   // history — see server/api/auth/claim-account.post.ts.
   async function claimAccount(email: string, password: string): Promise<void> {
+    await refresh()
     applyResult(
       await $fetch<AuthResult>('/api/auth/claim-account', {
         method: 'POST',
-        body: { email, password }
+        body: { email, password },
+        headers: csrfHeaders()
       })
     )
   }
 
   async function logout(): Promise<void> {
-    await $fetch('/api/auth/logout', { method: 'POST' })
+    await $fetch('/api/auth/logout', { method: 'POST', headers: csrfHeaders() })
     session.value = { authenticated: false }
   }
 
