@@ -1,5 +1,5 @@
 <template>
-  <div>
+  <div class="mira-app">
     <NuxtRouteAnnouncer />
     <NuxtPage />
     <EvaluationHud />

@@ -4,11 +4,52 @@
    crisper on its own hinting/rasterizer than a downloaded web font would anyway. */
 @theme {
   --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  /* Mira's shared palette. Red and amber remain reserved for safety warnings and destructive actions. */
+  --color-slate-50: #f6fbfa;
+  --color-slate-100: #eaf4f2;
+  --color-slate-200: #d4e5e1;
+  --color-slate-300: #b6d0cb;
+  --color-slate-400: #779691;
+  --color-slate-500: #55736e;
+  --color-slate-600: #405d59;
+  --color-slate-700: #2e4946;
+  --color-slate-800: #1e3735;
+  --color-slate-900: #102a2a;
+  --color-slate-950: #071817;
+
+  --color-indigo-50: #edf8f6;
+  --color-indigo-100: #d6eee9;
+  --color-indigo-200: #b3ddd5;
+  --color-indigo-300: #85c7bd;
+  --color-indigo-400: #4ca99d;
+  --color-indigo-500: #168c80;
+  --color-indigo-600: #087d72;
+  --color-indigo-700: #05685f;
+  --color-indigo-800: #07544e;
+  --color-indigo-900: #083f3b;
+  --color-indigo-950: #032724;
+}
+
+html,
+body,
+#__nuxt {
+  min-height: 100%;
 }
 
 body {
   font-family: var(--font-sans);
   background-color: #eef5f3;
+  color: #102a2a;
+}
+
+/* Gives every route the same image-free mist treatment as the entry screens. */
+.mira-app {
+  min-height: 100svh;
+  background:
+    radial-gradient(90% 60% at 85% 0%, rgba(158, 201, 196, 0.45) 0%, transparent 55%),
+    radial-gradient(70% 50% at 10% 80%, rgba(120, 168, 180, 0.28) 0%, transparent 50%),
+    linear-gradient(168deg, #eef5f3 0%, #d8e8e4 55%, #c5d9d4 100%);
 }
 
 /* Shared Mira mist atmosphere — used on landing-adjacent screens (screening, crisis, etc.)
