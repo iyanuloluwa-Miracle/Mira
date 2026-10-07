@@ -9,7 +9,7 @@ export default defineNuxtConfig({
   app: {
     head: {
       htmlAttrs: { lang: 'en' },
-      title: 'Mira — a private mental health check-in'
+      title: 'PARS — Privacy-Aware Risk Screening'
     }
   },
   vite: {

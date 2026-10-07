@@ -171,7 +171,7 @@ useHead({ title: CHAT_HEADER_TITLE })
     <div v-if="loadError" class="flex flex-1 items-center justify-center px-6 text-center">
       <div>
         <p class="text-base text-slate-900">{{ loadError }}</p>
-        <NuxtLink to="/" class="mt-4 inline-block text-indigo-700 underline">Back to Mira</NuxtLink>
+        <NuxtLink to="/" class="mt-4 inline-block text-indigo-700 underline">Back to PARS</NuxtLink>
       </div>
     </div>
 

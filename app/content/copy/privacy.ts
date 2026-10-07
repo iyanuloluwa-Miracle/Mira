@@ -10,7 +10,7 @@
 
 export const DASHBOARD_TITLE = 'Your data'
 export const DASHBOARD_INTRO =
-  'What Mira stores about this account, in plain language, and the controls you have over it.'
+  'What PARS stores about this account, in plain language, and the controls you have over it.'
 
 export const DASHBOARD_STORED_HEADING = 'What is stored'
 
@@ -30,9 +30,9 @@ export const CONSENT_PURPOSE_LABELS: Record<string, string> = {
 }
 export const CONSENT_PURPOSE_EFFECTS: Record<string, string> = {
   SCREENING:
-    'Recorded for transparency only. Screening itself is never blocked by this — you can always use Mira anonymously, on or off.',
+    'Recorded for transparency only. Screening itself is never blocked by this — you can always use PARS anonymously, on or off.',
   RESEARCH_LOGGING:
-    'When on, your conversation with the assistant is stored (encrypted) to help improve Mira. When off, only turn counts and timing are kept — never the message text.',
+    'When on, your conversation with the assistant is stored (encrypted) to help improve PARS. When off, only turn counts and timing are kept — never the message text.',
   HUMAN_REVIEW:
     'When on, a screening result that suggests you would benefit from professional support can be shared with our clinician team, including anything you wrote. When off, no identifiable record is created for review, and turning it off immediately hides any written response already shared from clinicians — the record of the case itself is not deleted.'
 }
@@ -61,13 +61,13 @@ export const DASHBOARD_LOAD_ERROR_MESSAGE = "We couldn't load your data summary.
 
 export const NOTICE_TITLE = 'Privacy notice'
 export const NOTICE_INTRO =
-  'This is a specific, working description of how Mira handles your data — not a generic ' +
+  'This is a specific, working description of how PARS handles your data — not a generic ' +
   'template. If anything here does not match what the app actually does, that is a bug; ' +
   'please report it.'
 
 export const NOTICE_WHO_HEADING = 'Who this covers'
 export const NOTICE_WHO_BODY =
-  'Anyone who uses Mira, whether anonymously or with a registered account. Anonymous use is ' +
+  'Anyone who uses PARS, whether anonymously or with a registered account. Anonymous use is ' +
   'always available and is never a lesser-privacy option — the same controls on this page ' +
   'apply either way, tied to your pseudonym rather than your name.'
 
@@ -117,7 +117,7 @@ export const NOTICE_RIGHTS_LINK_LABEL = 'Go to your data'
 export const NOTICE_RIGHTS_NOT_YET_HEADING = 'Not yet available through this interface'
 export const NOTICE_RIGHTS_NOT_YET_POINTS = [
   'Correction/rectification of a stored answer or score — currently, the only way to correct a result is to delete it and screen again.',
-  'Restriction of processing short of full deletion — Mira currently offers full erasure or per-purpose consent withdrawal, not a partial "pause processing but keep the data" state.'
+  'Restriction of processing short of full deletion — PARS currently offers full erasure or per-purpose consent withdrawal, not a partial "pause processing but keep the data" state.'
 ]
 
 export const NOTICE_CONTACT_HEADING = 'Contact'

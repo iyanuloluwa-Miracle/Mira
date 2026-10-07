@@ -11,7 +11,7 @@ sourceAttribution: 'TODO_VERIFY: citation pending clinical review'
 
 ## You just answered two questionnaires
 
-Mira asked you the PHQ-9 (nine questions about mood) and the GAD-7 (seven questions about
+PARS asked you the PHQ-9 (nine questions about mood) and the GAD-7 (seven questions about
 worry and anxiety). These are widely used screening questionnaires — they are a starting point
 for a conversation, not an ending point.
 
@@ -27,7 +27,7 @@ things, and the same person's score can change a lot from one week to the next.
 
 ## Why we show you a band, not just a number
 
-Mira groups scores into bands — such as minimal, mild, moderate, or high — because a single
+PARS groups scores into bands — such as minimal, mild, moderate, or high — because a single
 number ("I scored 11") is harder to make sense of on its own than a plain-language description
 ("your answers suggest mild symptoms"). The band is still just a summary of your answers, not a
 judgment about you as a person.

@@ -1,10 +1,11 @@
-# Mira
+# PARS
 
-Mira is a screening and decision-support tool for depression and anxiety symptoms. It is
-**not diagnostic, not therapeutic, and not a crisis service** — it exists to help someone
-understand their symptoms and get routed to the right kind of help, nothing more.
+**PARS** (Privacy-Aware Risk Screening) is a screening and decision-support tool for depression
+and anxiety symptoms. It is **not diagnostic, not therapeutic, and not a crisis service** — it
+exists to help someone understand their symptoms and get routed to the right kind of help,
+nothing more.
 
-> **Disclaimer**: Mira does not diagnose any condition, does not replace a clinician, and is
+> **Disclaimer**: PARS does not diagnose any condition, does not replace a clinician, and is
 > not equipped to handle a crisis on its own. If you or someone you know is in immediate
 > danger, contact local emergency services or a crisis line in your country right away.
 
@@ -133,7 +134,7 @@ database before starting the server for the first time.
 
 ## Research provenance and citation
 
-Mira is the reference implementation accompanying an MSc dissertation at the University of
+PARS is the reference implementation accompanying an MSc dissertation at the University of
 Lagos on privacy-preserving mental health screening for low-resource settings. The thesis
 itself is not part of this repository (see rule R10). If you use this code in academic work,
 please cite the dissertation rather than this repository directly; citation details will be

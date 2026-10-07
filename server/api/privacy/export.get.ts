@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   })
 
   setHeader(event, 'content-type', 'application/json')
-  setHeader(event, 'content-disposition', 'attachment; filename="mira-my-data.json"')
+  setHeader(event, 'content-disposition', 'attachment; filename="pars-my-data.json"')
 
   return data
 })

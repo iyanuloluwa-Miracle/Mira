@@ -31,7 +31,7 @@ async function main() {
     create: {
       email: 'admin@mira.local',
       passwordHash: adminPasswordHash,
-      fullName: 'Mira Admin',
+      fullName: 'PARS Admin',
       role: 'ADMIN',
       isActive: true
     }

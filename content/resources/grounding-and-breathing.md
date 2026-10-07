@@ -45,4 +45,4 @@ cool? This is a quiet, discreet technique you can use even while sitting somewhe
 ## If this is not enough
 
 These techniques are meant to help in the moment. If you are having thoughts of harming yourself,
-please use the **"I need help now"** button available throughout Mira right away.
+please use the **"I need help now"** button available throughout PARS right away.

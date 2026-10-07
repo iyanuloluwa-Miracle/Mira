@@ -65,7 +65,7 @@ export const NOT_A_DIAGNOSIS_POINTS = [
   'Only a licensed clinician can diagnose a mental health condition.'
 ]
 export const NOT_A_DIAGNOSIS_CLOSING =
-  'Mira is a screening tool. It is meant to help you understand your answers and point you ' +
+  'PARS is a screening tool. It is meant to help you understand your answers and point you ' +
   'toward the right kind of support next — not to tell you what is wrong.'
 
 // ---------------------------------------------------------------------------------------------
@@ -166,5 +166,5 @@ export const CRISIS_HELPLINES_UNVERIFIED_NOTICE =
 // CRISIS SCREEN — leaving and returning
 // ---------------------------------------------------------------------------------------------
 
-export const CRISIS_CONTINUE_LABEL = 'Continue to the rest of Mira'
+export const CRISIS_CONTINUE_LABEL = 'Continue to the rest of PARS'
 export const CRISIS_PERSISTENT_CONTROL_LABEL = 'I need help now'

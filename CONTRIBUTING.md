@@ -1,6 +1,6 @@
-# Contributing to Mira
+# Contributing to PARS
 
-Thanks for your interest in contributing. Mira is research software that people may rely on
+Thanks for your interest in contributing. PARS is research software that people may rely on
 while distressed, so the bar for changes near the safety logic is higher than a typical
 project's. Read this whole document before opening a PR that touches anything under
 `server/domain/`, `server/utils/`, `config/helplines.ts`, or `app/content/copy/`.

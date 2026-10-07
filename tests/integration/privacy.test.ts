@@ -132,7 +132,7 @@ describe('export (right to data portability, NFR1)', () => {
       headers: { cookie }
     })
     expect(exportResponse.status).toBe(200)
-    expect(exportResponse.headers.get('content-disposition')).toContain('mira-my-data.json')
+    expect(exportResponse.headers.get('content-disposition')).toContain('pars-my-data.json')
     const data = await exportResponse.json()
 
     expect(data.profile.pseudonym).toBe(pseudonym)

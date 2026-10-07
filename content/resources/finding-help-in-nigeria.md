@@ -11,7 +11,7 @@ sourceAttribution: 'TODO_VERIFY: citation pending clinical review'
 
 ## Starting points, not a directory
 
-Mira does not yet have a verified, up-to-date directory of specific clinics, hospitals, or
+PARS does not yet have a verified, up-to-date directory of specific clinics, hospitals, or
 helplines — building and verifying that directly is planned but not complete, and we would
 rather tell you that honestly than list numbers or names we have not personally confirmed. What
 follows are general categories of places people in Nigeria commonly find mental health support,
@@ -35,7 +35,7 @@ so you have somewhere to start looking.
 ## If you need help right now
 
 If you are in immediate danger or thinking about harming yourself, please use the **"I need help
-now"** button available throughout Mira, or go to the nearest hospital emergency department.
+now"** button available throughout PARS, or go to the nearest hospital emergency department.
 
 ## A note on cost
 

@@ -77,7 +77,7 @@ async function handleStart() {
 
     <div class="landing__content">
       <header class="landing__brand">
-        <h1 class="landing__title">Mira</h1>
+        <h1 class="landing__title">PARS</h1>
         <p class="landing__lede">
           A private, few-minute check-in on how you've been feeling lately.
         </p>
@@ -86,7 +86,7 @@ async function handleStart() {
       <aside class="landing__note" role="note">
         <p class="landing__note-title">This is not a diagnosis.</p>
         <p class="landing__note-body">
-          Mira is a screening tool, not a substitute for professional care. Only a qualified
+          PARS is a screening tool, not a substitute for professional care. Only a qualified
           clinician can diagnose a mental health condition.
         </p>
       </aside>

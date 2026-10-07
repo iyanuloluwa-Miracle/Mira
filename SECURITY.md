@@ -2,7 +2,7 @@
 
 ## Research software, not a certified clinical system
 
-Mira is the reference implementation for an MSc research project. **It is not certified for
+PARS is the reference implementation for an MSc research project. **It is not certified for
 clinical deployment and is not a substitute for professional mental health care or a crisis
 service.** Treat any deployment beyond local development and research evaluation as
 out-of-scope for the guarantees this project makes.

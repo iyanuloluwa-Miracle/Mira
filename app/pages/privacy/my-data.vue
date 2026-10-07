@@ -120,7 +120,7 @@ async function handleExport(): Promise<void> {
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url
-    link.download = 'mira-my-data.json'
+    link.download = 'pars-my-data.json'
     link.click()
     URL.revokeObjectURL(url)
   } catch {
@@ -180,7 +180,7 @@ useHead({ title: DASHBOARD_TITLE })
 
     <div v-else-if="deleted" class="mt-10 flex flex-col gap-4 text-center">
       <p class="text-base text-slate-900">{{ DASHBOARD_DELETE_SUCCESS_MESSAGE }}</p>
-      <NuxtLink to="/" class="text-indigo-700 underline">Back to Mira</NuxtLink>
+      <NuxtLink to="/" class="text-indigo-700 underline">Back to PARS</NuxtLink>
     </div>
 
     <div v-else class="mt-6 flex flex-col gap-8">

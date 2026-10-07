@@ -11,7 +11,7 @@ religion, or sexual identity and orientation.
 We pledge to act and interact in ways that contribute to an open, welcoming, diverse,
 inclusive, and healthy community.
 
-Because Mira concerns mental health, we additionally expect contributors to discuss
+Because PARS concerns mental health, we additionally expect contributors to discuss
 mental-health-related design and content with care, and to avoid stigmatizing language in
 code, comments, issues, and documentation.
 

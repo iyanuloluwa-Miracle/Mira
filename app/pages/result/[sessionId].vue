@@ -115,12 +115,12 @@ useHead({ title: 'Your result' })
 
       <div v-else-if="loadError" class="mt-10 text-center">
         <p class="text-base text-slate-900">{{ loadError }}</p>
-        <NuxtLink to="/" class="mt-4 inline-block text-teal-800 underline">Back to Mira</NuxtLink>
+        <NuxtLink to="/" class="mt-4 inline-block text-teal-800 underline">Back to PARS</NuxtLink>
       </div>
 
       <div v-else-if="deleted" class="mt-10 flex flex-col gap-4 text-center">
         <p class="text-base text-slate-900">{{ DELETE_SESSION_SUCCESS_MESSAGE }}</p>
-        <NuxtLink to="/" class="text-teal-800 underline">Back to Mira</NuxtLink>
+        <NuxtLink to="/" class="text-teal-800 underline">Back to PARS</NuxtLink>
       </div>
 
       <div v-else-if="showCrisis">

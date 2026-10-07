@@ -11,7 +11,7 @@ sourceAttribution: 'TODO_VERIFY: citation pending clinical review'
 
 ## More than just sadness
 
-Everyone feels sad sometimes — that is a normal part of life. What Mira calls "low mood" or
+Everyone feels sad sometimes — that is a normal part of life. What PARS calls "low mood" or
 "symptoms of depression" is different: it tends to last longer, shows up most days, and can
 affect your energy, your sleep, your appetite, your concentration, and how much you enjoy
 things you used to enjoy.

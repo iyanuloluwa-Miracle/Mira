@@ -11,7 +11,7 @@ sourceAttribution: 'TODO_VERIFY: citation pending clinical review'
 
 ## Signs that something needs attention sooner rather than later
 
-Most of what Mira covers is about ordinary, common struggles with mood and anxiety. But
+Most of what PARS covers is about ordinary, common struggles with mood and anxiety. But
 sometimes things move into territory that needs faster action. It is worth reaching out for
 urgent help — to a trusted person, a health facility, or an emergency service — if you notice:
 
@@ -35,7 +35,7 @@ emergency service.
 ## If this is about you, right now
 
 If you are having thoughts of harming yourself, please use the **"I need help now"** button
-available throughout Mira. It will take you straight to support information, with no need to
+available throughout PARS. It will take you straight to support information, with no need to
 finish anything else first.
 
 ## If this is about someone else

@@ -22,7 +22,7 @@ that first step feel a little smaller.
   support is reason enough.
 - It can help to jot down a few things beforehand: how long you've been feeling this way, what
   has changed, and anything that feels urgent to mention.
-- You can bring your Mira screening result if you find it useful to show the clinician, but you
+- You can bring your PARS screening result if you find it useful to show the clinician, but you
   are never required to.
 
 ## During the appointment
@@ -47,5 +47,5 @@ happens.
 ## What this is not
 
 This is general information, not a promise of what any specific clinician or facility will do.
-Mira cannot book this appointment for you, but the "Finding help in Nigeria" resource has some
+PARS cannot book this appointment for you, but the "Finding help in Nigeria" resource has some
 general starting points for where to look.

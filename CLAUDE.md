@@ -1,11 +1,11 @@
 # CLAUDE.md
 
-Working context for anyone (human or Claude) making changes to Mira. Read this before
+Working context for anyone (human or Claude) making changes to PARS. Read this before
 touching anything in `server/domain/`, `server/utils/`, `app/content/copy/`, or `config/`.
 
 ## What this system is
 
-Mira is a privacy-preserving, mobile-first web application that screens adults for symptoms
+PARS (Privacy-Aware Risk Screening) is a privacy-preserving, mobile-first web application that screens adults for symptoms
 of depression and anxiety using validated instruments, computes a risk level, and routes the
 person either to psychoeducational resources or to human support. It is built for a Nigerian
 low-resource context: cheap Android devices, expensive and unreliable data, and a strong

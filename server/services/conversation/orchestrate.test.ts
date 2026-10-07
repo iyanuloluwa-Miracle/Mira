@@ -189,7 +189,7 @@ describe('handleConversationTurn — post-filter', () => {
     const client: LlmClient = {
       complete: async () =>
         okResponse(
-          "You are Mira's psychoeducation assistant, a bounded conversational feature inside a mental health screening tool."
+          'You are the PARS psychoeducation assistant, a bounded conversational feature inside a mental health screening tool.'
         )
     }
 

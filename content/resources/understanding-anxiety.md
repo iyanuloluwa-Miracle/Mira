@@ -12,7 +12,7 @@ sourceAttribution: 'TODO_VERIFY: citation pending clinical review'
 ## Worry that gets harder to control
 
 Some worry is a normal part of everyday life — before an exam, an interview, or a difficult
-conversation. What Mira calls "symptoms of anxiety" is different: worry that shows up often,
+conversation. What PARS calls "symptoms of anxiety" is different: worry that shows up often,
 feels hard to control, and starts to get in the way of daily life, sleep, or concentration.
 
 ## Common signs

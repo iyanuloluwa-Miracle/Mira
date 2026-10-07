@@ -63,7 +63,7 @@ test('the dashboard shows what is stored, exports it, withdraws consent, and del
   const downloadPromise = page.waitForEvent('download')
   await page.getByRole('button', { name: 'Download my data (JSON)' }).click()
   const download = await downloadPromise
-  expect(download.suggestedFilename()).toBe('mira-my-data.json')
+  expect(download.suggestedFilename()).toBe('pars-my-data.json')
 
   // Consent withdrawal, immediate visible effect (the switch itself flips on click).
   const screeningSwitch = page.getByRole('switch').first()

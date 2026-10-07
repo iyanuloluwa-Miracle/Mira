@@ -112,5 +112,5 @@ test('an unknown session id shows a clear error with a way back, not a stuck scr
   await page.goto('/support/00000000-0000-0000-0000-000000000000')
 
   await expect(page.getByText("We couldn't find that screening result.")).toBeVisible()
-  await expect(page.getByRole('link', { name: 'Back to Mira' })).toBeVisible()
+  await expect(page.getByRole('link', { name: 'Back to PARS' })).toBeVisible()
 })

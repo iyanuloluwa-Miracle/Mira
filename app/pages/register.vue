@@ -58,7 +58,7 @@ async function handleSubmit() {
           Create an account
         </h1>
         <p class="mt-2 text-sm text-slate-600">
-          Not required to use Mira — you can always
+          Not required to use PARS — you can always
           <NuxtLink to="/" class="font-medium text-teal-800 underline"
             >start a private check</NuxtLink
           >
